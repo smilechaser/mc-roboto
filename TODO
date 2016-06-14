@@ -1,0 +1,15 @@
+- online mode (encyrption)
+- when sending a packet, if you don't fill in all fields you will get an attribute error
+- need a way to say "me too" to be notified about packets that an upstream reactor has already expressed interest in
+- what about being updated when an upstream reactors handler method is called?
+
+- hotbar
+	- select
+	- drop (#/all)
+- inventory
+	- hotbar
+	- armor
+	- crafting
+- use item in hand
+- place block
+- use "thing" (crafting table, chest, forge, lever, button, etc.)
