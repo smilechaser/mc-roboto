@@ -25,7 +25,7 @@ from wiring import Wiring
 
 class Config:
 
-    MC_DATA_FOLDER = '~/projects/minecraft-data/'
+    MC_DATA_FOLDER = './minecraft-data/'
     PROTOCOL_VERSION = '1.9.2'
 
     SERVER = 'localhost'
