@@ -70,8 +70,12 @@ class Robot:
     # self.reactor.subscribe(State.PLAY, 'chat', self.on_chat)
     @Signal.packet_listener(State.PLAY, 'chat')
     def on_chat(self, packet):
+        '''Ulitimately this needs to be refactored to be more comprehensive
+        (not to mention robust) since this will be the robot's means
+        of conversing with the world.
 
-        '''
+        For now though, we're using it as a way to send commands to it.
+
         ignored_topics = (
             # we get a chat.type.text when we receive an echo of what we said
             'chat.type.text',
@@ -105,60 +109,67 @@ class Robot:
 
         message = ''.join([x['text'] for x in data['with'][-1]['extra']])
 
-        if message is not None:
+        if message is None:
+            return
 
-            parts = message.split(' ')
+        parts = message.split(' ')
 
-            action = parts[0]
-            args = parts[1:]
+        action = parts[0]
+        args = parts[1:]
 
-            if action == 'goto':
+        if action == 'goto':
+            # format: goto [~]x [~]y [~]z
 
-                self.destination = Position.from_args(self.model.position, args)
+            self.destination = Position.from_args(self.model.position, args)
 
-                self.model.facing.at(self.model.position, self.destination)
+            self.model.facing.at(self.model.position, self.destination)
 
-                with self.responses.chat as chat:
-                    msg = 'Heading to destination: {}'.format(self.destination)
-                    if sender != 'Server':
-                        chat.message = "/msg {} {}".format(sender, msg)
-                    else:
-                        chat.message = msg
+            self.say('Heading to destination: {}'.format(self.destination), sender)
 
-                    chat.send(self.connection)
+        elif action == 'stop':
+            # format: stop
 
-            elif action == 'stop':
+            self.model.do_stop()
+            self.on_stop()
 
-                self.model.do_stop()
-                self.on_stop()
+        elif action == 'look':
+            # format: look [~]x [~]y [~]z
 
-            elif action == 'look':
+            target = Position.from_args(self.model.position, args)
 
-                target = Position.from_args(self.model.position, args)
+            self.model.facing.at(self.model.position, target)
 
-                self.model.facing.at(self.model.position, target)
+        elif action == 'break':
+            # format: break block at [~]x [~]y [~]z
 
-            elif action == 'break':
+            # TODO implement break command
+            self.say("Sorry, I don't know how to break blocks yet.", sender)
 
-                pass
+        elif action == 'place':
+            # format: place block_type at [~]x [~]y [~]z
+            # format: place hotbar_index at [~]x [~]y [~]z
 
-            elif action == 'place':
+            # TODO implement place command
+            self.say("Sorry, I don't know how to place things yet.", sender)
 
-                pass
+        else:
 
+            self.say("Sorry, I don't understand.", sender)
+
+    def say(self, message, sender=None):
+
+        with self.responses.chat as chat:
+            if sender != 'Server':
+                chat.message = "/msg {} {}".format(sender, message)
             else:
+                chat.message = message
 
-                with self.responses.chat as chat:
-                    msg = "Sorry, I don't understand."
-                    if sender != 'Server':
-                        chat.message = "/msg {} {}".format(sender, msg)
-                    else:
-                        chat.message = msg
-
-                    chat.send(self.connection)
+            chat.send(self.connection)
 
     @Signal.receiver
     def on_stop(self):
+
+        self.say('Stopped.')
 
         self.destination = None
 
@@ -170,6 +181,8 @@ class Robot:
 
     @Signal.receiver
     def on_arrived(self):
+
+        self.say('Arrived.')
 
         self.model.facing.pitch = 0.0
 
