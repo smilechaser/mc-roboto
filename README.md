@@ -1,4 +1,4 @@
-# mc-roboto
+I# mc-roboto
 
 A MineCraft client library with dynamic protocol capability for building an
 Autonomous Agent (robot).
@@ -13,6 +13,8 @@ I've always wanted to make a robot. But why a MineCraft one? There are several r
 1. cost
 2. accessible
 3. meaningful
+
+There are other advantages in using MineCraft as a platform as it allows us to consider some [AI Goals](./research/AI_goals.md) as effectively solved - at least for the purposes of our research.
 
 ###Cost
 
