@@ -41,6 +41,7 @@ class ModelReactor:
         self.responses.add(State.PLAY, 'teleport_confirm')
         self.responses.add(State.PLAY, 'flying')
         self.responses.add(State.PLAY, 'position_look')
+        self.responses.add(State.PLAY, 'held_item_slot')
 
         self.dead = True
         self.respawn_timer = None
@@ -184,11 +185,16 @@ class ModelReactor:
         self.position.y = packet.y
         self.position.z = packet.z
 
-        print('on_position, X: {}, Y: {}, Z: {}, '
-              'Yaw: {}, Pitch: {}, teleport ID: {}'.format(
-                  packet.x, packet.y, packet.z,
-                  packet.yaw, packet.pitch, packet.teleportId
-              )
+        print(
+            'on_position, X: {}, Y: {}, Z: {}, '
+            'Yaw: {}, Pitch: {}, teleport ID: {}'.format(
+                packet.x,
+                packet.y,
+                packet.z,
+                packet.yaw,
+                packet.pitch,
+                packet.teleportId
+            )
         )
 
         self.do_stop()
@@ -212,3 +218,12 @@ class ModelReactor:
     def do_stop(self):
 
         self.velocity.reset()
+
+    # TODO turn this into a property?
+    def set_active_hotbar_slot(self, slot_num):
+
+        with self.responses.held_item_slot as his:
+
+            his.slotId = slot_num
+
+            his.send(self.connection)

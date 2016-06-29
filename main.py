@@ -26,7 +26,7 @@ from wiring import Wiring
 class Config:
 
     MC_DATA_FOLDER = './minecraft-data/'
-    PROTOCOL_VERSION = '1.9.2'
+    PROTOCOL_VERSION = '1.10'
 
     SERVER = 'localhost'
     PORT = 25565
@@ -151,6 +151,13 @@ class Robot:
 
             # TODO implement place command
             self.say("Sorry, I don't know how to place things yet.", sender)
+
+        elif action == 'select':
+            # format: select slot_num (0-8)
+
+            slot = int(args[0])
+
+            self.model.set_active_hotbar_slot(slot)
 
         else:
 

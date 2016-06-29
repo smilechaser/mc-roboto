@@ -122,16 +122,6 @@ class String(DataType):
         return retval
 
 
-@data_type(name='u16')
-class UnsignedInt16(DataType):
-
-    @classmethod
-    def to_wire(clz, data):
-
-        # NOTE int.to_bytes is python3 specific
-        return data.to_bytes(2, byteorder='big')
-
-
 @data_type(name='i8')
 class Int8(DataType):
 
@@ -223,3 +213,22 @@ class Int32(DataType):
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!l', data[offset: offset + 4])[0], 4
+
+
+@data_type(name='u16')
+class UnsignedInt16(DataType):
+
+    @classmethod
+    def to_wire(clz, data):
+
+        # NOTE int.to_bytes is python3 specific
+        return data.to_bytes(2, byteorder='big', signed=False)
+
+
+@data_type(name='i16')
+class Int16(DataType):
+
+    @classmethod
+    def to_wire(clz, data):
+
+        return data.to_bytes(2, byteorder='big', signed=True)
