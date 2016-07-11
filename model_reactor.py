@@ -42,6 +42,8 @@ class ModelReactor:
         self.responses.add(State.PLAY, 'flying')
         self.responses.add(State.PLAY, 'position_look')
         self.responses.add(State.PLAY, 'held_item_slot')
+        self.responses.add(State.PLAY, 'block_dig')
+        self.responses.add(State.PLAY, 'entity_action')
 
         self.dead = True
         self.respawn_timer = None
@@ -140,8 +142,6 @@ class ModelReactor:
     @Signal.packet_listener(State.PLAY, 'login')
     def on_player_login(self, packet):
 
-        # TODO also need to chain packet_reactor.on_login in order to get uuid
-
         self.game_info.entity_id = packet.entityId
         self.game_info.game_mode = packet.gameMode
         self.game_info.dimension = packet.dimension
@@ -227,3 +227,41 @@ class ModelReactor:
             his.slotId = slot_num
 
             his.send(self.connection)
+
+    def swap_hands(self):
+
+        # TODO need to add support for "complex packets" i.e. like this one ;)
+
+        with self.responses.block_dig as bd:
+
+            bd.status = 6
+            bd.location.x = 0
+            bd.location.y = 0
+            bd.location.z = 0
+            bd.face = 0
+
+            bd.send(self.connection)
+
+    def crouch(self):
+
+        with self.responses.entity_action as ea:
+
+            ea.entityId = self.game_info.entity_id
+
+            # TODO are there constants for these in minecraft-data?
+            ea.actionId = 0
+            ea.jumpBoost = 0
+
+            ea.send(self.connection)
+
+    def stand(self):
+
+        with self.responses.entity_action as ea:
+
+            ea.entityId = self.game_info.entity_id
+
+            # TODO are there constants for these in minecraft-data?
+            ea.actionId = 1
+            ea.jumpBoost = 0
+
+            ea.send(self.connection)

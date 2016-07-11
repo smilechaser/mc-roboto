@@ -139,6 +139,16 @@ class Robot:
 
             self.model.facing.at(self.model.position, target)
 
+        elif action == 'crouch':
+            # format: crouch
+
+            self.model.crouch()
+
+        elif action == 'stand':
+            # format: stand
+
+            self.model.stand()
+
         elif action == 'break':
             # format: break block at [~]x [~]y [~]z
 
@@ -158,6 +168,11 @@ class Robot:
             slot = int(args[0])
 
             self.model.set_active_hotbar_slot(slot)
+
+        elif action == 'swap':
+            # format: swap
+
+            self.model.swap_hands()
 
         else:
 
