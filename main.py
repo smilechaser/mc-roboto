@@ -8,7 +8,7 @@ from protocol import State
 from packet_reactor import PacketReactor
 from protocol import PacketFactory
 from connection import Connection
-from model_reactor import ModelReactor
+from agent_reactor import ModelReactor
 from listener import Signal
 from atoms import Position
 from responses import Responses
@@ -34,11 +34,11 @@ class Config:
 
 class Robot:
 
-    def __init__(self, packet_factory, model_reactor):
+    def __init__(self, packet_factory, agent_reactor):
 
         self.factory = packet_factory
-        self.connection = model_reactor.connection
-        self.model = model_reactor
+        self.connection = agent_reactor.connection
+        self.model = agent_reactor
 
         self.responses = Responses(self.factory)
 
@@ -223,16 +223,16 @@ def main():
 
     packet_reactor = PacketReactor(factory, connection)
 
-    model_reactor = ModelReactor(factory, connection)
+    agent_reactor = ModelReactor(factory, connection)
 
-    robot = Robot(factory, model_reactor)
+    robot = Robot(factory, agent_reactor)
 
     wiring = Wiring(factory)
 
     with wiring as wire:
 
         wire(packet_reactor).to(connection)
-        wire(model_reactor).to(packet_reactor)
+        wire(agent_reactor).to(packet_reactor)
         wire(robot).to(packet_reactor)
         wire(robot).to(robot)
 
@@ -245,7 +245,7 @@ def main():
             connection.process()
     except:
 
-        model_reactor.respond = False
+        agent_reactor.respond = False
 
         raise
 
