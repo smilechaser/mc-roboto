@@ -428,9 +428,9 @@ class PositionField(Field):
         assert self.y is not None
         assert self.z is not None
 
-        x = self.x
-        y = self.y
-        z = self.z
+        x = int(self.x)
+        y = int(self.y)
+        z = int(self.z)
 
         if x < 0:
             x = x - (1 << 26)

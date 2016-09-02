@@ -156,8 +156,7 @@ class Robot:
 
             target = Position.from_args(self.model.position, position)
 
-            # TODO implement break command
-            self.say("Sorry, I don't know how to break blocks yet.", sender)
+            self.model.dig(target)
 
         elif action == 'place':
             # format: place block_type at [~]x [~]y [~]z

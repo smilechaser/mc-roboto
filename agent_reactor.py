@@ -58,6 +58,8 @@ class ModelReactor:
 
         self.game_info = GameInfo()
 
+        self.dig_ticks_remaining = None
+
         self.responder_thread = threading.Thread(target=self.responder)
         self.respond = True
 
@@ -111,6 +113,24 @@ class ModelReactor:
             self.position.x += self.velocity.x
             self.position.y += self.velocity.y
             self.position.z += self.velocity.z
+
+        if self.dig_ticks_remaining is not None:
+
+            self.dig_ticks_remaining -= 1
+
+            if self.dig_ticks_remaining == 0:
+
+                self.dig_ticks_remaining = None
+
+                with self.responses.block_dig as dig:
+
+                    dig.status = 2
+                    dig.location.x = 0
+                    dig.location.y = 0
+                    dig.location.z = 0
+                    dig.face = 0
+
+                    dig.send(self.connection)
 
         if self.tick_counter % 20 == 0:
 
@@ -261,3 +281,25 @@ class ModelReactor:
             ea.jumpBoost = 0
 
             ea.send(self.connection)
+
+    def dig(self, target_location):
+
+        if self.dig_ticks_remaining is not None:
+            return
+
+        # start digging
+        with self.responses.block_dig as dig:
+
+            dig.status = 0
+            dig.location.x = target_location.x
+            dig.location.y = target_location.y
+            dig.location.z = target_location.z
+            # TODO this isn't accurate...but does it need to be?
+            dig.face = 0
+
+            dig.send(self.connection)
+
+            # schedule a "stop digging" response
+            # TODO can we figure out how long this should actually be? or can
+            # we wait for a packet from the server and then stop?
+            self.dig_ticks_remaining = 20
