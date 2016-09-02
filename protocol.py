@@ -1,11 +1,18 @@
 '''
 '''
 
-import os
+import copy
 import enum
 import json
+import os
 
-from datatypes import VarInt, DATA_TYPE_REGISTRY
+from datatypes import VarInt, UnsignedInt64, DATA_TYPE_REGISTRY
+
+# TODO we need a base class for exceptions defined by this library
+
+
+class NoSuchFieldException(RuntimeError):
+    pass
 
 
 @enum.unique
@@ -24,20 +31,6 @@ class Direction(enum.Enum):
     TO_CLIENT = 'toClient'
 
 
-class FieldManager:
-
-    def __init__(self):
-
-        self.fields = {}
-        self.field_order = []
-
-    def add(self, name, type):
-
-        self.field_order.append(name)
-
-        self.fields[name] = type
-
-
 class Packet:
 
     def __init__(self, name, packet_id):
@@ -49,15 +42,16 @@ class Packet:
         self.__dict__['name'] = name
         self.__dict__['packet_id'] = packet_id
         self.__dict__['fields'] = FieldManager()
+        self.__dict__['resolved'] = False
 
         self.clear()
 
     def clear(self):
 
-        self.__dict__['values'] = {}
         self.__dict__['resolved'] = False
         self.__dict__['data'] = None
         self.__dict__['data_size'] = None
+        self.__dict__['fields'].clear()
 
         return self
 
@@ -66,14 +60,19 @@ class Packet:
         if key in self.__dict__:
             return self.__dict__[key]
 
-        # if this is a field we need to resolve our values
-        if key in self.fields.fields and not self.resolved:
-            self.resolve()
+        # try to delegate to FieldManager
+        try:
 
-        if key in self.values:
-            return self.values[key]
+            # automagically trigger resolve
+            if not self.resolved and self.data is not None:
+                self.resolve()
 
-        raise AttributeError("'{}' object has no attribute "
+            return self.fields.get_field_value(key)
+
+        except NoSuchFieldException:
+            pass
+
+        raise AttributeError("'{}' object has no attribute (or field) "
                              "'{}'".format(self.__class__.__name__, key))
 
     def __setattr__(self, key, value):
@@ -82,61 +81,31 @@ class Packet:
             self.__dict__[key] = value
             return
 
-        if key not in self.__dict__['fields'].fields:
-            raise AttributeError("'{}' object has no attribute "
-                                 "'{}'".format(self.__class__.__name__, key))
+        # try to delegate to FieldManager
+        try:
+            self.fields.set_field_value(key, value)
+            return
+        except NoSuchFieldException:
+            pass
 
-        self.__dict__['values'][key] = value
+        raise AttributeError('No attribute {} for {}.'.format(key, self))
 
     def render(self):
-
-        # TODO this does not handle encryption
+        '''Return a binary representation of this packet - ready to be sent.'''
 
         data = bytearray()
 
         # packet ID [varint]
         data.extend(VarInt.to_wire(self.packet_id))
 
-        for field_name in self.fields.field_order:
-
-            data_type_name = self.fields.fields[field_name]
-
-            data_type = None
-
-            try:
-                data_type = DATA_TYPE_REGISTRY[data_type_name]
-            except KeyError:
-                raise Exception('Unrecognized data type "{}". '
-                                'Is it implemented?'.format(data_type_name))
-
-            data.extend(data_type.to_wire(self.values[field_name]))
+        self.fields.render(data)
 
         return data
 
     def resolve(self):
-        '''Parse data into object propery values.'''
+        '''Parse data into object property values.'''
 
-        offset = 0
-
-        for field_name in self.fields.field_order:
-
-            data_type_name = self.fields.fields[field_name]
-
-            data_type = None
-
-            try:
-                data_type = DATA_TYPE_REGISTRY[data_type_name]
-            except KeyError:
-                raise Exception('Unrecognized data type "{}". '
-                                'Is it implemented?'.format(data_type_name))
-
-            value, bytes_consumed = data_type.from_wire(
-                self.data, offset, self.data_size
-            )
-
-            offset += bytes_consumed
-
-            self.values[field_name] = value
+        self.fields.resolve(self.data, self.data_size)
 
         self.resolved = True
 
@@ -144,6 +113,16 @@ class Packet:
 
         self.data = data
         self.data_size = data_size
+
+    def dump(self):
+
+        return {
+            'name': self.name,
+            'packet_id': self.packet_id,
+            'resolved': self.resolved,
+            'data_size': self.data_size,
+            'fields': self.fields.dump()
+        }
 
 
 class PacketFactory:
@@ -161,7 +140,11 @@ class PacketFactory:
         self.name_packet_map = {}
         self.id_packet_map = {}
 
-        data = json.load(open(protocol_path, 'r'))
+        data = None
+
+        with open(protocol_path, 'r') as fin:
+
+            data = json.load(fin)
 
         for state, directions in data.items():
 
@@ -212,7 +195,11 @@ class PacketFactory:
                             .setdefault(direction_enum, {}) \
                             .setdefault(packet_id, packet)
 
-        data = json.load(open(version_path, 'r'))
+        data = None
+
+        with open(version_path, 'r') as fin:
+
+            data = json.load(fin)
 
         self.version = data['version']
 
@@ -237,101 +224,242 @@ class PacketTemplate:
         self.direction = None
         self.packet_id = None
         self.name = None
-        self.fields = None
+        self.fields = FieldManager()
 
     @classmethod
     def load(clz, state, direction, name, packet_id, data):
 
-        packet = PacketTemplate()
+        template = PacketTemplate()
 
-        packet.state = state
-        packet.direction = direction
-        packet.name = name
-        packet.packet_id = packet_id
+        template.state = state
+        template.direction = direction
+        template.name = name
+        template.packet_id = packet_id
 
         assert isinstance(data, list)
         assert len(data) == 2
         assert data[0] == 'container'
 
-        packet.fields = []
-
         for item in data[1]:
 
             assert len(item) == 2
 
-            field = Field.load(item)
+            type_name = item['type']
 
-            packet.fields.append(field)
+            if isinstance(type_name, list):
+                type_name = type_name[0]
 
-        return packet
+            template.fields.add(
+                name=item['name'],
+                type=type_name
+            )
+
+        return template
 
     def create(self):
 
         new_packet = Packet(self.name, self.packet_id)
 
-        for field in self.fields:
-
-            new_packet.fields.add(field.name, field.type.name)
+        new_packet.fields.copy_fields_from(self.fields)
 
         return new_packet
 
-    @property
-    def pprint_data(self):
+
+class FieldManager:
+
+    def __init__(self):
+
+        self.fields = []
+        self.field_map = {}
+
+    def get_field_value(self, name):
+
+        if name not in self.field_map:
+            raise NoSuchFieldException(name)
+
+        field = self.fields[self.field_map[name]]
+
+        if isinstance(field, Field):
+
+            # TODO this needs refactoring
+            if isinstance(field, PositionField):
+                return field
+
+            return field.value
+
+        return field
+
+    def set_field_value(self, name, value):
+
+        if name not in self.field_map:
+            raise NoSuchFieldException(name)
+
+        self.fields[self.field_map[name]].value = value
+
+    def clear(self):
+
+        for field in self.fields:
+            field.clear()
+
+    def add(self, name, type):
+
+        field = None
+
+        if type == 'position':
+            field = PositionField(name, type)
+        else:
+            field = Field(name, type)
+
+        self.fields.append(field)
+
+        self.field_map[name] = len(self.fields) - 1
+
+    def copy_fields_from(self, source):
+
+        self.fields = []
+        self.field_map = {}
+
+        for field in source.fields:
+
+            self.fields.append(copy.copy(field))
+            self.field_map[field.name] = len(self.fields) - 1
+
+    def render(self, data):
+
+        for field in self.fields:
+
+            field.render(data)
+
+    def resolve(self, data, data_length):
+
+        offset = 0
+
+        for field in self.fields:
+
+            bytes_consumed = field.resolve(data, offset, data_length)
+
+            offset += bytes_consumed
+
+    def dump(self):
 
         return {
-            'state': self.state,
-            'direction': self.direction,
-            'packet_id': self.packet_id,
-            'name': self.name,
-            'fields': [x.pprint_data for x in self.fields]
+            'fields': [field.dump() for field in self.fields]
         }
 
 
 class Field:
 
-    def __init__(self):
+    def __init__(self, name, type, value=None):
 
-        self.name = None
-        self.type = None
+        self.name = name
+        self.type = type
+        self.value = value
 
-    @classmethod
-    def load(clz, data):
+    def clear(self):
 
-        field = Field()
+        self.value = None
 
-        field.name = data['name']
+    def render(self, data):
 
-        field.type = FieldType.load(data['type'])
+        data_type = None
 
-        return field
+        try:
+            data_type = DATA_TYPE_REGISTRY[self.type]
+        except KeyError:
+            raise Exception('Unrecognized data type "{}". '
+                            'Is it implemented?'.format(self.type))
 
-    @property
-    def pprint_data(self):
+        data.extend(data_type.to_wire(self.value))
 
-        return (self.name, self.type.pprint_data)
+    def resolve(self, data, offset, data_length):
 
+        data_type = None
 
-class FieldType:
+        try:
+            data_type = DATA_TYPE_REGISTRY[self.type]
+        except KeyError:
+            raise Exception('Unrecognized data type "{}". '
+                            'Is it implemented?'.format(self.type))
 
-    def __init__(self):
+        value, bytes_consumed = data_type.from_wire(
+            data, offset, data_length
+        )
 
-        self.name = None
+        self.value = value
 
-    @classmethod
-    def load(clz, data):
+        return bytes_consumed
 
-        obj = clz()
-
-        if isinstance(data, list):
-            obj.name = data[0]
-        else:
-            obj.name = data
-
-        return obj
-
-    @property
-    def pprint_data(self):
+    def dump(self):
 
         return {
-            'style': self.name
+            'name': self.name,
+            'type': self.type,
+            'value': self.value
         }
+
+
+class PositionField(Field):
+
+    class Location:
+
+        x = None
+        y = None
+        z = None
+
+        def __init__(self, x=None, y=None, z=None):
+
+            self.x = x
+            self.y = y
+            self.z = z
+
+        def clear(self):
+
+            self.x, self.y, self.z = None, None, None
+
+    location = Location()
+
+    def clear(self):
+
+        self.location.clear()
+
+    def render(self, data):
+
+        assert self.x is not None
+        assert self.y is not None
+        assert self.z is not None
+
+        x = self.x
+        y = self.y
+        z = self.z
+
+        if x < 0:
+            x = x - (1 << 26)
+
+        if y < 0:
+            y = y - (1 << 12)
+
+        if z < 0:
+            z = z - (1 << 26)
+
+        val = ((x & 0x3FFFFFF) << 38) | ((y & 0xFFF) << 26) | (z & 0x3FFFFFF)
+
+        data.extend(UnsignedInt64.to_wire(val))
+
+    def resolve(self, data, offset, data_length):
+
+        value, bytes_consumed = UnsignedInt64.from_wire(data, offset, data_length)
+
+        self.x = value >> 38
+        self.y = (value >> 26) & 0xFFF
+        self.z = value & 0x3ffffff
+
+        if self.x >= (1 << 25):
+            self.x = self.x - (1 << 26)
+
+        if self.y > (1 << 11):
+            self.y = self.y - (1 << 12)
+
+        if self.z > (1 << 25):
+            self.z = self.z - (1 << 26)
+
+        return bytes_consumed

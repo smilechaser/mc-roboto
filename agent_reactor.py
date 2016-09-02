@@ -62,7 +62,7 @@ class ModelReactor:
         self.respond = True
 
     def responder(self):
-        '''This is the method that gets called in a thread every "tick".'''
+        '''This is the method that gets called in a separate thread.'''
 
         while self.respond:
 
@@ -75,7 +75,7 @@ class ModelReactor:
                     self.last_time = now
                     self.on_tick_local()
 
-                    self.tick()
+                    self.tick(self.last_time)
 
     def on_tick_local(self):
 
@@ -86,11 +86,7 @@ class ModelReactor:
             if self.respawn_timer <= 0:
 
                 with self.responses.client_command as status:
-                    # used to be:
-                    # -----------
-                    # status = self.PKT_CLIENT_COMMAND.clear()
-                    # status.actionId = 0
-                    # self.reactor.respond(status)
+
                     status.actionId = 0
 
                     status.send(self.connection)
@@ -119,6 +115,7 @@ class ModelReactor:
         if self.tick_counter % 20 == 0:
 
             with self.responses.position_look as pkt:
+
                 pkt.x = self.position.x
                 pkt.y = self.position.y
                 pkt.z = self.position.z
@@ -198,7 +195,6 @@ class ModelReactor:
         )
 
         self.do_stop()
-        self.stop()
 
         # TODO need to develop a "mixin architecture" that will allow us
         # to define packet behavior, i.e. to deal with things like the .flags
@@ -207,6 +203,7 @@ class ModelReactor:
         teleport_id = packet.teleportId
 
         with self.responses.teleport_confirm as tpc:
+
             tpc.teleportId = teleport_id
 
             tpc.send(self.connection)
@@ -218,6 +215,7 @@ class ModelReactor:
     def do_stop(self):
 
         self.velocity.reset()
+        self.stop()
 
     # TODO turn this into a property?
     def set_active_hotbar_slot(self, slot_num):
@@ -229,8 +227,6 @@ class ModelReactor:
             his.send(self.connection)
 
     def swap_hands(self):
-
-        # TODO need to add support for "complex packets" i.e. like this one ;)
 
         with self.responses.block_dig as bd:
 

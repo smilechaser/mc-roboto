@@ -23,8 +23,8 @@ class ResponseContext:
 
     def __init__(self, parent, packet):
 
-        self.parent = parent
-        self.packet = packet
+        self.__dict__['parent'] = parent
+        self.__dict__['packet'] = packet
 
     def __enter__(self):
 
@@ -38,12 +38,28 @@ class ResponseContext:
 
     def __setattr__(self, key, value):
 
-        if key not in ('parent', 'packet'):
+        if key in self.__dict__:
+            super().__setattr__(key, value)
+            return
 
-            setattr(self.packet, key, value)
+        setattr(self.packet, key, value)
 
-        super().__setattr__(key, value)
+    def __getattr__(self, key):
+
+        if key in self.__dict__:
+            return self.__dict__[key]
+
+        try:
+            return getattr(self.__dict__['packet'], key)
+        except AttributeError:
+            raise
+
+        raise AttributeError
 
     def send(self, connection):
 
         connection.send(self.packet)
+
+    def dump(self):
+
+        return self.packet.dump()

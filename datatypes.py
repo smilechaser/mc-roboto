@@ -31,11 +31,13 @@ class DataType:
 
     @classmethod
     def to_wire(clz, data):
-        raise NotImplementedError
+
+        raise NotImplementedError('to_wire not implemented for {}'.format(clz))
 
     @classmethod
     def from_wire(clz, data, offset, fullsize):
-        raise NotImplementedError
+
+        raise NotImplementedError('from_wire not implemented for {}'.format(clz))
 
 
 @data_type(name='varint')
@@ -130,6 +132,11 @@ class Int8(DataType):
 
         return struct.unpack('!b', data[offset: offset + 1])[0], 1
 
+    @classmethod
+    def to_wire(clz, data):
+
+        return struct.pack('!b', data)
+
 
 @data_type(name='u8')
 class UnsignedInt8(DataType):
@@ -140,6 +147,53 @@ class UnsignedInt8(DataType):
         return struct.unpack('!B', data[offset: offset + 1])[0], 1
 
 
+@data_type(name='u16')
+class UnsignedInt16(DataType):
+
+    @classmethod
+    def to_wire(clz, data):
+
+        # NOTE int.to_bytes is python3 specific
+        return data.to_bytes(2, byteorder='big', signed=False)
+
+
+@data_type(name='i16')
+class Int16(DataType):
+
+    @classmethod
+    def to_wire(clz, data):
+
+        return data.to_bytes(2, byteorder='big', signed=True)
+
+
+@data_type(name='i32')
+class Int32(DataType):
+
+    @classmethod
+    def from_wire(clz, data, offset, fullsize):
+
+        return struct.unpack('!l', data[offset: offset + 4])[0], 4
+
+    @classmethod
+    def to_wire(clz, data):
+
+        return data.to_bytes(4, byteorder='big', signed=True)
+
+
+@data_type(name='u32')
+class UnsignedInt32(DataType):
+
+    @classmethod
+    def from_wire(clz, data, offset, fullsize):
+
+        return struct.unpack('!L', data[offset: offset + 4])[0], 4
+
+    @classmethod
+    def to_wire(clz, data):
+
+        return data.to_bytes(4, byteorder='big', signed=False)
+
+
 @data_type(name='i64')
 class Int64(DataType):
 
@@ -147,6 +201,20 @@ class Int64(DataType):
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!q', data[offset: offset + 8])[0], 8
+
+
+@data_type(name='u64')
+class UnsignedInt64(DataType):
+
+    @classmethod
+    def from_wire(clz, data, offset, fullsize):
+
+        return struct.unpack('!Q', data[offset: offset + 8])[0], 8
+
+    @classmethod
+    def to_wire(clz, data):
+
+        return struct.pack('!Q', data)
 
 
 @data_type(name='f32')
@@ -204,31 +272,3 @@ class RestBuffer(DataType):
     def from_wire(clz, data, offset, fullsize):
 
         return data[offset: fullsize - offset], fullsize - offset
-
-
-@data_type(name='i32')
-class Int32(DataType):
-
-    @classmethod
-    def from_wire(clz, data, offset, fullsize):
-
-        return struct.unpack('!l', data[offset: offset + 4])[0], 4
-
-
-@data_type(name='u16')
-class UnsignedInt16(DataType):
-
-    @classmethod
-    def to_wire(clz, data):
-
-        # NOTE int.to_bytes is python3 specific
-        return data.to_bytes(2, byteorder='big', signed=False)
-
-
-@data_type(name='i16')
-class Int16(DataType):
-
-    @classmethod
-    def to_wire(clz, data):
-
-        return data.to_bytes(2, byteorder='big', signed=True)

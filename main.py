@@ -54,15 +54,15 @@ class Robot:
             wire(self).to(self)
 
     @Signal.receiver
-    def on_tick(self):
+    def on_tick(self, last_time):
 
         if self.destination is not None:
 
             distance_to_target = self.model.position.distance(self.destination)
 
-            if distance_to_target <= 0.5:
-                self.model.do_stop()
+            if distance_to_target <= 0.1:
                 self.arrived()
+                self.model.do_stop()
             else:
 
                 self.model.velocity = self.model.position.impulse(self.destination)
@@ -152,6 +152,10 @@ class Robot:
         elif action == 'break':
             # format: break block at [~]x [~]y [~]z
 
+            position = args[2:]
+
+            target = Position.from_args(self.model.position, position)
+
             # TODO implement break command
             self.say("Sorry, I don't know how to break blocks yet.", sender)
 
@@ -159,8 +163,20 @@ class Robot:
             # format: place block_type at [~]x [~]y [~]z
             # format: place hotbar_index at [~]x [~]y [~]z
 
+            source, position = args[0], args[2:]
+
+            target = Position.from_args(self.model.position, position)
+
             # TODO implement place command
+            del(source)
             self.say("Sorry, I don't know how to place things yet.", sender)
+
+        elif action == 'drop':
+            # format: drop
+            # format: drop n
+            # format: drop all
+
+            pass
 
         elif action == 'select':
             # format: select slot_num (0-8)
@@ -180,6 +196,9 @@ class Robot:
 
     def say(self, message, sender=None):
 
+        # TODO for some reason this only seems to work if sender != None
+        # TODO we should probably, by default, only chat with our "owner"
+
         with self.responses.chat as chat:
             if sender != 'Server':
                 chat.message = "/msg {} {}".format(sender, message)
@@ -191,8 +210,6 @@ class Robot:
     @Signal.receiver
     def on_stop(self):
 
-        self.say('Stopped.')
-
         self.destination = None
 
         self.model.facing.pitch = 0.0
@@ -203,8 +220,6 @@ class Robot:
 
     @Signal.receiver
     def on_arrived(self):
-
-        self.say('Arrived.')
 
         self.model.facing.pitch = 0.0
 

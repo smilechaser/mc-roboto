@@ -99,7 +99,8 @@ class Observer:
         if 'on_{}'.format(self.name) != handler_name:
             return False
 
-        self.listeners.append(handler)
+        if handler not in self.listeners:
+            self.listeners.append(handler)
 
         return True
 
