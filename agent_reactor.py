@@ -44,6 +44,7 @@ class ModelReactor:
         self.responses.add(State.PLAY, 'held_item_slot')
         self.responses.add(State.PLAY, 'block_dig')
         self.responses.add(State.PLAY, 'entity_action')
+        self.responses.add(State.PLAY, 'block_place')
 
         self.dead = True
         self.respawn_timer = None
@@ -303,3 +304,24 @@ class ModelReactor:
             # TODO can we figure out how long this should actually be? or can
             # we wait for a packet from the server and then stop?
             self.dig_ticks_remaining = 20
+
+    def place_block(self, target_location):
+
+        with self.responses.block_place as bp:
+
+            bp.location.x = target_location.x
+            bp.location.y = target_location.y
+            bp.location.z = target_location.z
+
+            # TODO fix this so that placing slabs, trap doors, etc. works
+            # as expected
+            bp.direction = 0
+
+            bp.hand = 0
+
+            # AFAIK using 7 translates to dead-center
+            bp.cursorX = 7
+            bp.cursorY = 7
+            bp.cursorZ = 7
+
+            bp.send(self.connection)

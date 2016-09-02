@@ -159,16 +159,13 @@ class Robot:
             self.model.dig(target)
 
         elif action == 'place':
-            # format: place block_type at [~]x [~]y [~]z
-            # format: place hotbar_index at [~]x [~]y [~]z
+            # format: place at [~]x [~]y [~]z
 
-            source, position = args[0], args[2:]
+            position = args[1:]
 
             target = Position.from_args(self.model.position, position)
 
-            # TODO implement place command
-            del(source)
-            self.say("Sorry, I don't know how to place things yet.", sender)
+            self.model.place_block(target)
 
         elif action == 'drop':
             # format: drop
