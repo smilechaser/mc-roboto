@@ -272,3 +272,29 @@ class RestBuffer(DataType):
     def from_wire(clz, data, offset, fullsize):
 
         return data[offset: fullsize - offset], fullsize - offset
+
+
+@data_type(name='buffer')
+class Buffer(DataType):
+
+    @classmethod
+    def from_wire(clz, data, offset, fullsize):
+
+        # read the length (varint)
+        packet_length, varint_length = VarInt.from_wire(data, offset, fullsize)
+
+        # get the rest of the buffer
+        return data[offset + varint_length: packet_length], varint_length + packet_length
+
+
+@data_type(name='array')
+class Array(DataType):
+
+    @classmethod
+    def from_wire(clz, data, offset, fullsize):
+
+        # read the length (varint)
+        packet_length, varint_length = VarInt.from_wire(data, offset, fullsize)
+
+        # get the rest of the array
+        return data[offset + varint_length: packet_length], varint_length + packet_length
