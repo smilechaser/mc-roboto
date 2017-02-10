@@ -134,8 +134,26 @@ class PacketFactory:
                                  'pc',
                                  game_version)
 
-        protocol_path = os.path.join(base_path, 'protocol.json')
         version_path = os.path.join(base_path, 'version.json')
+
+        #
+        # handle minecraft-data's "schema versioning" by looking up the
+        # location of the protocol.json data via the majorVersion key.
+        #
+
+        version_data = None
+
+        with open(version_path, 'r') as fin:
+
+            version_data = json.load(fin)
+
+        self.version = version_data['version']
+
+        protocol_path = os.path.join(mcdata_base_dir,
+                                     'data',
+                                     'pc',
+                                     version_data['majorVersion'],
+                                     'protocol.json')
 
         self.name_packet_map = {}
         self.id_packet_map = {}
@@ -194,14 +212,6 @@ class PacketFactory:
                             .setdefault(state_enum, {}) \
                             .setdefault(direction_enum, {}) \
                             .setdefault(packet_id, packet)
-
-        data = None
-
-        with open(version_path, 'r') as fin:
-
-            data = json.load(fin)
-
-        self.version = data['version']
 
     def create_by_name(self, state, direction, name):
 

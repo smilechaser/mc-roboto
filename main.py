@@ -14,6 +14,11 @@ from atoms import Position
 from responses import Responses
 from wiring import Wiring
 
+from map_chunk import parse_chunk_data, ChunkManager
+
+# DEBUG
+import time
+
 # TODO need the concept of a "commander" i.e. the entity
 # that is authorized to give the bot commands. this ultimately may lead to
 # categorizing commands according to privilege i.e. asking for bots
@@ -26,7 +31,7 @@ from wiring import Wiring
 class Config:
 
     MC_DATA_FOLDER = './minecraft-data/'
-    PROTOCOL_VERSION = '1.10'
+    PROTOCOL_VERSION = '1.11.2'
 
     SERVER = 'localhost'
     PORT = 25565
@@ -45,6 +50,8 @@ class Robot:
         self.responses.add(State.PLAY, 'chat')
 
         self.destination = None
+
+        self.chunk_manager = ChunkManager()
 
         wiring = Wiring(self.factory)
 
@@ -67,7 +74,47 @@ class Robot:
 
                 self.model.velocity = self.model.position.impulse(self.destination)
 
-    # self.reactor.subscribe(State.PLAY, 'chat', self.on_chat)
+#    @Signal.packet_listener(State.PLAY, 'map_chunk')
+    def on_map_chunk(self, packet):
+
+        # TODO for now just experiment with parsing the data - will need to
+        # refactor it into its own "terrain reactor" or something
+
+        #
+        # convert packet.specifiedChunks from a bitmask to a list
+        #
+
+        specified_chunks = []
+
+        bitMap = packet.bitMap
+        mask = 0x1
+
+        for n in range(0, 16):
+
+            if mask & bitMap != 0:
+                specified_chunks.append(n)
+
+            mask = mask << 1
+
+        print('--- chunk ---')
+
+        # DEBUG
+        start = time.process_time()
+
+        parse_chunk_data(packet.x, packet.z, packet.groundUp, specified_chunks, packet.chunkData, packet.blockEntities,
+                         self.chunk_manager, None)
+
+        # DEBUG
+        end = time.process_time()
+        print('Elapsed: ', end-start)
+
+        print('--- done ---')
+
+#     @Signal.packet_listener(State.PLAY, 'unload_chunk')
+    def on_unload_chunk(self, packet):
+
+        self.chunk_manager.unload(packet.chunkX, packet.chunkZ)
+
     @Signal.packet_listener(State.PLAY, 'chat')
     def on_chat(self, packet):
         '''Ulitimately this needs to be refactored to be more comprehensive
