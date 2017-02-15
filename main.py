@@ -216,10 +216,17 @@ class Robot:
 
         elif action == 'drop':
             # format: drop
-            # format: drop n
             # format: drop all
 
-            pass
+            all = False
+
+            if args:
+
+                assert args[0] == 'all', 'Expected "all" but got "{}".'.format(args)
+
+                all = True
+
+            self.model.drop(all)
 
         elif action == 'select':
             # format: select slot_num (0-8)

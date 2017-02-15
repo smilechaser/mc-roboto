@@ -259,6 +259,22 @@ class ModelReactor:
 
             bd.send(self.connection)
 
+    def drop(self, all=False):
+
+        with self.responses.block_dig as bd:
+
+            if all:
+                bd.status = 3
+            else:
+                bd.status = 4
+
+            bd.location.x = 0
+            bd.location.y = 0
+            bd.location.z = 0
+            bd.face = 0
+
+            bd.send(self.connection)
+
     def crouch(self):
 
         with self.responses.entity_action as ea:
