@@ -199,7 +199,7 @@ class Robot:
         elif action == 'break':
             # format: break block at [~]x [~]y [~]z
 
-            position = args[2:]
+            position = args[1:]
 
             target = Position.from_args(self.model.position, position)
 

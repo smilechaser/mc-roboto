@@ -319,9 +319,8 @@ class ModelReactor:
 
             bp.hand = 0
 
-            # AFAIK using 7 translates to dead-center
-            bp.cursorX = 7
-            bp.cursorY = 7
-            bp.cursorZ = 7
+            bp.cursorX = 0.5
+            bp.cursorY = 0.5
+            bp.cursorZ = 0.5
 
             bp.send(self.connection)
