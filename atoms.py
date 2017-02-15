@@ -59,7 +59,7 @@ class Position(Vector3):
         return Velocity(*values)
 
     @classmethod
-    def from_args(self, current, args):
+    def from_args(clz, current, args):
 
         values = [current.x, current.y, current.z]
 
