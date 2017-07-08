@@ -8,15 +8,13 @@ import os
 
 from datatypes import VarInt, UnsignedInt64, DATA_TYPE_REGISTRY
 
-# TODO we need a base class for exceptions defined by this library
-
-
 class NoSuchFieldException(RuntimeError):
     pass
 
 
 @enum.unique
 class State(enum.Enum):
+    '''This represents the different game states that our client can be in.'''
 
     HANDSHAKING = 'handshaking'
     LOGIN = 'login'
@@ -26,108 +24,129 @@ class State(enum.Enum):
 
 @enum.unique
 class Direction(enum.Enum):
+    '''The direction (to server, to client) that the packet is meant to go.'''
 
     TO_SERVER = 'toServer'
     TO_CLIENT = 'toClient'
 
 
+class FieldManager:
+
+    def __init__(self, parent):
+
+        self.__dict__['parent'] = parent
+
+    def __getattr__(self, name):
+
+        for index, (field_name, field_type) in enumerate(self.parent.FIELDS):
+
+            if field_name == name:
+
+                return self.parent._values[index]
+
+        raise AttributeError()
+
+    def __setattr__(self, name, value):
+
+        if name in self.__dict__:
+            self.__dict__[name] = value
+            return
+
+        for index, (field_name, field_type) in enumerate(self.parent.FIELDS):
+
+            if field_name == name:
+                self.parent._values[index] = value
+                return
+
+        raise AttributeError()
+
+
+# TODO create a context manager for Packe so that we can do:
+#
+# with PacketContext(packet : Packet, connection : Connection()) as fields:
+#
+#   fields.xyz = 1
+#
+# and then when it exits the context it sends the packet via the connection
+
+
 class Packet:
 
-    def __init__(self, name, packet_id):
+    DIRECTION = None
+    STATE = None
+    NAME = None
+    PACKET_ID = None
+    FIELDS = [] # name, type
 
-        assert isinstance(packet_id, int), \
-            'Expecting packet_id as int but got "{}".'\
-            .format(type(packet_id).__name__)
+    _values = []
+    fields = None
 
-        self.__dict__['name'] = name
-        self.__dict__['packet_id'] = packet_id
-        self.__dict__['fields'] = FieldManager()
-        self.__dict__['resolved'] = False
+    def __init__(self):
 
-        self.clear()
+        self.fields = FieldManager(self)
 
-    def clear(self):
+        # initialize values based on field type
+        self._values = [DATA_TYPE_REGISTRY[field_type].default() for _, field_type in self.FIELDS]
 
-        self.__dict__['resolved'] = False
-        self.__dict__['data'] = None
-        self.__dict__['data_size'] = None
-        self.__dict__['fields'].clear()
-
-        return self
-
-    def __getattr__(self, key):
-
-        if key in self.__dict__:
-            return self.__dict__[key]
-
-        # try to delegate to FieldManager
-        try:
-
-            # automagically trigger resolve
-            if not self.resolved and self.data is not None:
-                self.resolve()
-
-            return self.fields.get_field_value(key)
-
-        except NoSuchFieldException:
-            pass
-
-        raise AttributeError("'{}' object has no attribute (or field) "
-                             "'{}'".format(self.__class__.__name__, key))
-
-    def __setattr__(self, key, value):
-
-        if key in self.__dict__:
-            self.__dict__[key] = value
-            return
-
-        # try to delegate to FieldManager
-        try:
-            self.fields.set_field_value(key, value)
-            return
-        except NoSuchFieldException:
-            pass
-
-        raise AttributeError('No attribute {} for {}.'.format(key, self))
-
-    def render(self):
+    def to_wire(self):
         '''Return a binary representation of this packet - ready to be sent.'''
 
         data = bytearray()
 
         # packet ID [varint]
-        data.extend(VarInt.to_wire(self.packet_id))
+        data.extend(VarInt.to_wire(self.PACKET_ID))
 
-        self.fields.render(data)
+        # serialize all the field values
+        for (field_name, field_type), value in zip(self.FIELDS, self._values):
+
+            data_type = None
+
+            try:
+                data_type = DATA_TYPE_REGISTRY[field_type]
+            except KeyError:
+                raise Exception('Unrecognized data type "{}". '
+                                'Is it implemented?'.format(field_type))
+
+            data.extend(data_type.to_wire(value))
 
         return data
 
-    def resolve(self):
+    def from_wire(self, data, data_size):
         '''Parse data into object property values.'''
 
-        self.fields.resolve(self.data, self.data_size)
+        offset = 0
 
-        self.resolved = True
+        # serialize all the field values
+        for value_index, (field_name, field_type) in enumerate(self.FIELDS):
 
-    def hydrate(self, data, data_size):
+            data_type = None
 
-        self.data = data
-        self.data_size = data_size
+            try:
+                data_type = DATA_TYPE_REGISTRY[field_type]
+            except KeyError:
+                raise Exception('Unrecognized data type "{}". '
+                                'Is it implemented?'.format(field_type))
 
-    def dump(self):
+            value, bytes_consumed = data_type.from_wire(
+                data, offset, data_size
+            )
 
-        return {
-            'name': self.name,
-            'packet_id': self.packet_id,
-            'resolved': self.resolved,
-            'data_size': self.data_size,
-            'fields': self.fields.dump()
-        }
+            self._values[value_index] = value
+
+            offset += bytes_consumed
 
 
 class PacketFactory:
 
+    @classmethod
+    def packet_name_to_classname(clz, name):
+
+        return name.title().replace('_','') + 'Packet'
+
     def __init__(self, mcdata_base_dir, game_version):
+
+        # [state][direction]([name] or [packet_id])
+        self.lookup_map = {}
 
         base_path = os.path.join(mcdata_base_dir,
                                  'data',
@@ -155,34 +174,35 @@ class PacketFactory:
                                      version_data['majorVersion'],
                                      'protocol.json')
 
-        self.name_packet_map = {}
-        self.id_packet_map = {}
-
         data = None
 
         with open(protocol_path, 'r') as fin:
 
             data = json.load(fin)
 
-        for state, directions in data.items():
+        for state_name, directions in data.items():
 
-            if state == 'types':
+            if state_name == 'types':
                 continue
 
-            state_enum = State(state)
+            state = State(state_name)
 
-            for direction, types in directions.items():
+            for direction_name, types in directions.items():
 
-                direction_enum = Direction(direction)
+                direction = Direction(direction_name)
 
                 for _, packets in types.items():
 
-                    # this is packetID --> name
-                    packet_id_mappings = data[state][direction]['types']['packet'][1][0]['type'][1]['mappings']  # NOQA
+                    packet_ids = {}
 
-                    # reverse it so we have name --> packetID
-                    packet_id_mappings = \
-                        {v: int(k, 16) for k, v in packet_id_mappings.items()}
+                    for name, packet_data in packets.items():
+
+                        if name != 'packet':
+                            continue
+
+                        for packet_id, name in packet_data[1][0]['type'][1]['mappings'].items():
+
+                            packet_ids[name] = int(packet_id, 16)
 
                     # process each packet
                     for name, packet_data in packets.items():
@@ -190,286 +210,49 @@ class PacketFactory:
                         if name == 'packet':
                             continue
 
-                        name = name.replace('packet_', '')
+                        packet_name = name.replace('packet_', '')
+                        packet_id = packet_ids[packet_name]
 
-                        packet_id = packet_id_mappings[name]
+                        assert isinstance(packet_data, list)
+                        assert len(packet_data) == 2
+                        assert packet_data[0] == 'container'
 
-                        packet = PacketTemplate.load(
-                            state_enum,
-                            direction_enum,
-                            name,
-                            packet_id,
-                            packet_data
-                        )
+                        # gather the packet fields (name and datatype)
 
-                        self.name_packet_map \
-                            .setdefault(state_enum, {}) \
-                            .setdefault(direction_enum, {}) \
-                            .setdefault(name, packet)
+                        fields = []
 
-                        # update the map of packet_id --> packet
-                        self.id_packet_map \
-                            .setdefault(state_enum, {}) \
-                            .setdefault(direction_enum, {}) \
-                            .setdefault(packet_id, packet)
+                        for item in packet_data[1]:
 
-    def create_by_name(self, state, direction, name):
+                            assert len(item) == 2
 
-        template = self.name_packet_map[state][direction][name]
+                            type_name = item['type']
 
-        return template.create()
+                            if isinstance(type_name, list):
+                                type_name = type_name[0]
 
-    def create_by_id(self, state, direction, packet_id):
+                            fields.append((item['name'], type_name))
 
-        template = self.id_packet_map[state][direction][packet_id]
+                        # now build the packet from the data we have
 
-        return template.create()
+                        class_members = {
+                            'DIRECTION': direction,
+                            'STATE': state,
+                            'NAME': packet_name,
+                            'PACKET_ID': packet_id,
+                            'FIELDS': fields,
+                            '__doc__': ''   # TODO put something useful here
+                        }
 
+                        class_name = self.packet_name_to_classname(packet_name)
+                        packet = type(class_name, (Packet, ), class_members)
 
-class PacketTemplate:
+                        self.lookup_map.setdefault(state, {}).setdefault(direction, {}).setdefault(packet_name, packet)
+                        self.lookup_map[state][direction][packet_id] = packet
 
-    def __init__(self):
+    def get_by_name(self, state: State, direction: Direction, name: str) -> Packet:
 
-        self.state = None
-        self.direction = None
-        self.packet_id = None
-        self.name = None
-        self.fields = FieldManager()
+        return self.lookup_map[state][direction][name]
 
-    @classmethod
-    def load(clz, state, direction, name, packet_id, data):
+    def get_by_id(self, state: State, direction: Direction, packet_id: int) -> Packet:
 
-        template = PacketTemplate()
-
-        template.state = state
-        template.direction = direction
-        template.name = name
-        template.packet_id = packet_id
-
-        assert isinstance(data, list)
-        assert len(data) == 2
-        assert data[0] == 'container'
-
-        for item in data[1]:
-
-            assert len(item) == 2
-
-            type_name = item['type']
-
-            if isinstance(type_name, list):
-                type_name = type_name[0]
-
-            template.fields.add(
-                name=item['name'],
-                type=type_name
-            )
-
-        return template
-
-    def create(self):
-
-        new_packet = Packet(self.name, self.packet_id)
-
-        new_packet.fields.copy_fields_from(self.fields)
-
-        return new_packet
-
-
-class FieldManager:
-
-    def __init__(self):
-
-        self.fields = []
-        self.field_map = {}
-
-    def get_field_value(self, name):
-
-        if name not in self.field_map:
-            raise NoSuchFieldException(name)
-
-        field = self.fields[self.field_map[name]]
-
-        if isinstance(field, Field):
-
-            # TODO this needs refactoring
-            if isinstance(field, PositionField):
-                return field
-
-            return field.value
-
-        return field
-
-    def set_field_value(self, name, value):
-
-        if name not in self.field_map:
-            raise NoSuchFieldException(name)
-
-        self.fields[self.field_map[name]].value = value
-
-    def clear(self):
-
-        for field in self.fields:
-            field.clear()
-
-    def add(self, name, type):
-
-        field = None
-
-        if type == 'position':
-            field = PositionField(name, type)
-        else:
-            field = Field(name, type)
-
-        self.fields.append(field)
-
-        self.field_map[name] = len(self.fields) - 1
-
-    def copy_fields_from(self, source):
-
-        self.fields = []
-        self.field_map = {}
-
-        for field in source.fields:
-
-            self.fields.append(copy.copy(field))
-            self.field_map[field.name] = len(self.fields) - 1
-
-    def render(self, data):
-
-        for field in self.fields:
-
-            field.render(data)
-
-    def resolve(self, data, data_length):
-
-        offset = 0
-
-        for field in self.fields:
-
-            bytes_consumed = field.resolve(data, offset, data_length)
-
-            offset += bytes_consumed
-
-    def dump(self):
-
-        return {
-            'fields': [field.dump() for field in self.fields]
-        }
-
-
-class Field:
-
-    def __init__(self, name, type, value=None):
-
-        self.name = name
-        self.type = type
-        self.value = value
-
-    def clear(self):
-
-        self.value = None
-
-    def render(self, data):
-
-        data_type = None
-
-        try:
-            data_type = DATA_TYPE_REGISTRY[self.type]
-        except KeyError:
-            raise Exception('Unrecognized data type "{}". '
-                            'Is it implemented?'.format(self.type))
-
-        data.extend(data_type.to_wire(self.value))
-
-    def resolve(self, data, offset, data_length):
-
-        data_type = None
-
-        try:
-            data_type = DATA_TYPE_REGISTRY[self.type]
-        except KeyError:
-            raise Exception('Unrecognized data type "{}". '
-                            'Is it implemented?'.format(self.type))
-
-        value, bytes_consumed = data_type.from_wire(
-            data, offset, data_length
-        )
-
-        self.value = value
-
-        return bytes_consumed
-
-    def dump(self):
-
-        return {
-            'name': self.name,
-            'type': self.type,
-            'value': self.value
-        }
-
-
-class PositionField(Field):
-
-    class Location:
-
-        x = None
-        y = None
-        z = None
-
-        def __init__(self, x=None, y=None, z=None):
-
-            self.x = x
-            self.y = y
-            self.z = z
-
-        def clear(self):
-
-            self.x, self.y, self.z = None, None, None
-
-    location = Location()
-
-    def clear(self):
-
-        self.location.clear()
-
-    def render(self, data):
-
-        assert self.x is not None
-        assert self.y is not None
-        assert self.z is not None
-
-        x = int(self.x)
-        y = int(self.y)
-        z = int(self.z)
-
-        if x < 0:
-            x = x - (1 << 26)
-
-        if y < 0:
-            y = y - (1 << 12)
-
-        if z < 0:
-            z = z - (1 << 26)
-
-        val = ((x & 0x3FFFFFF) << 38) | ((y & 0xFFF) << 26) | (z & 0x3FFFFFF)
-
-        data.extend(UnsignedInt64.to_wire(val))
-
-    def resolve(self, data, offset, data_length):
-
-        value, bytes_consumed = UnsignedInt64.from_wire(data, offset, data_length)
-
-        self.x = value >> 38
-        self.y = (value >> 26) & 0xFFF
-        self.z = value & 0x3ffffff
-
-        if self.x >= (1 << 25):
-            self.x = self.x - (1 << 26)
-
-        if self.y > (1 << 11):
-            self.y = self.y - (1 << 12)
-
-        if self.z > (1 << 25):
-            self.z = self.z - (1 << 26)
-
-        return bytes_consumed
+        return self.lookup_map[state][direction][packet_id]

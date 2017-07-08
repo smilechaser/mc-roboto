@@ -46,7 +46,7 @@ class Connection:
 
         buffer = bytearray()
 
-        payload = packet.render()
+        payload = packet.to_wire()
 
         if self.compression:
 

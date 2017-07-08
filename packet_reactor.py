@@ -4,8 +4,7 @@
 import enum
 
 from wiring import Wiring
-from protocol import State
-from responses import Responses
+from protocol import State, Direction
 from listener import Signal
 
 
@@ -34,38 +33,44 @@ class PacketReactor:
         self.connection = connection
         self.state = State.HANDSHAKING
 
-        self.responses = Responses(self.packet_factory)
-
-        self.responses.add(State.HANDSHAKING, 'set_protocol')
-        self.responses.add(State.LOGIN, 'login_start')
-        self.responses.add(State.PLAY, 'keep_alive')
+        self.keep_alive_packet = packet_factory.get_by_name(
+            State.PLAY,
+            Direction.TO_SERVER,
+            'keep_alive'
+        )
 
         # wire ourselves...to ourselves...
 
         wiring = Wiring(self.packet_factory)
 
         with wiring as wire:
-
             wire(self).to(self)
 
     def login(self, username):
 
-        with self.responses.set_protocol as handshake_pkt:
+        handshake_pkt = self.packet_factory.get_by_name(
+            State.HANDSHAKING,
+            Direction.TO_SERVER,
+            'set_protocol'
+        )()
 
-            handshake_pkt.protocolVersion = self.packet_factory.version
-            handshake_pkt.serverHost = self.connection.server
-            handshake_pkt.serverPort = self.connection.port
-            handshake_pkt.nextState = self.HandshakeState.PLAY.value
+        handshake_pkt.fields.protocolVersion = self.packet_factory.version
+        handshake_pkt.fields.serverHost = self.connection.server
+        handshake_pkt.fields.serverPort = self.connection.port
+        handshake_pkt.fields.nextState = self.HandshakeState.PLAY.value
 
-            handshake_pkt.send(self.connection)
+        self.connection.send(handshake_pkt)
 
         self.state = State.LOGIN
 
-        with self.responses.login_start as login_pkt:
+        login_pkt = self.packet_factory.get_by_name(
+            State.LOGIN,
+            Direction.TO_SERVER,
+            'login_start'
+        )()
 
-            login_pkt.username = username
-
-            login_pkt.send(self.connection)
+        login_pkt.fields.username = username
+        self.connection.send(login_pkt)
 
     @Signal.receiver
     def on_packet(self, packet_id, packet_data, packet_length):
@@ -79,7 +84,6 @@ class PacketReactor:
     #
     # default handlers
     #
-    #
     @Signal.packet_listener(State.LOGIN, 'encryption_begin')
     def on_encryption_begin(self, packet):
 
@@ -91,8 +95,8 @@ class PacketReactor:
     def on_login(self, packet):
 
         print('LOGIN: Robot "{}:{}" has been logged in.'.format(
-            packet.username,
-            packet.uuid)
+            packet.fields.username,
+            packet.fields.uuid)
         )
 
         self.state = State.PLAY
@@ -110,12 +114,11 @@ class PacketReactor:
     @Signal.packet_listener(State.PLAY, 'keep_alive')
     def on_keep_alive(self, packet):
 
-        with self.responses.keep_alive as response:
-
-            response.keepAliveId = packet.keepAliveId
-            response.send(self.connection)
+        response = self.keep_alive_packet()
+        response.fields.keepAliveId = packet.fields.keepAliveId
+        self.connection.send(response)
 
     @Signal.packet_listener(State.PLAY, 'kick_disconnect')
     def on_kick_disconnect(self, packet):
 
-        raise KickedOutException(packet.reason)
+        raise KickedOutException(packet.fields.reason)

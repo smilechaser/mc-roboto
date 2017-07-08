@@ -4,14 +4,13 @@
 import os
 import json
 
-from protocol import State
+from protocol import State, Direction
 from packet_reactor import PacketReactor
 from protocol import PacketFactory
 from connection import Connection
 from agent_reactor import ModelReactor
 from listener import Signal
 from atoms import Position
-from responses import Responses
 from wiring import Wiring
 
 from map_chunk import parse_chunk_data, ChunkManager
@@ -19,14 +18,7 @@ from map_chunk import parse_chunk_data, ChunkManager
 # DEBUG
 import time
 
-# TODO need the concept of a "commander" i.e. the entity
-# that is authorized to give the bot commands. this ultimately may lead to
-# categorizing commands according to privilege i.e. asking for bots
-# position anyone can do, asking for materials certain trusted players might
-# do, and telling them to do something destructive is for the very privileged
-
 # TODO need to download blocks so we know when to fall ;)
-
 
 class Config:
 
@@ -45,13 +37,15 @@ class Robot:
         self.connection = agent_reactor.connection
         self.model = agent_reactor
 
-        self.responses = Responses(self.factory)
-
-        self.responses.add(State.PLAY, 'chat')
-
         self.destination = None
 
         self.chunk_manager = ChunkManager()
+
+        self.chat_packet = self.factory.get_by_name(
+            State.PLAY,
+            Direction.TO_SERVER,
+            'chat'
+        )
 
         wiring = Wiring(self.factory)
 
@@ -86,7 +80,7 @@ class Robot:
 
         specified_chunks = []
 
-        bitMap = packet.bitMap
+        bitMap = packet.fields.bitMap
         mask = 0x1
 
         for n in range(0, 16):
@@ -101,7 +95,7 @@ class Robot:
         # DEBUG
         start = time.process_time()
 
-        parse_chunk_data(packet.x, packet.z, packet.groundUp, specified_chunks, packet.chunkData, packet.blockEntities,
+        parse_chunk_data(packet.fields.x, packet.fields.z, packet.fields.groundUp, specified_chunks, packet.fields.chunkData, packet.fields.blockEntities,
                          self.chunk_manager, None)
 
         # DEBUG
@@ -113,7 +107,7 @@ class Robot:
 #     @Signal.packet_listener(State.PLAY, 'unload_chunk')
     def on_unload_chunk(self, packet):
 
-        self.chunk_manager.unload(packet.chunkX, packet.chunkZ)
+        self.chunk_manager.unload(packet.fields.chunkX, packet.fields.chunkZ)
 
     @Signal.packet_listener(State.PLAY, 'chat')
     def on_chat(self, packet):
@@ -145,7 +139,7 @@ class Robot:
             )
         '''
 
-        data = json.loads(packet.message)
+        data = json.loads(packet.fields.message)
 
         translate = data['translate']
 
@@ -249,13 +243,14 @@ class Robot:
         # TODO for some reason this only seems to work if sender != None
         # TODO we should probably, by default, only chat with our "owner"
 
-        with self.responses.chat as chat:
-            if sender != 'Server':
-                chat.message = "/msg {} {}".format(sender, message)
-            else:
-                chat.message = message
+        chat = self.chat_packet()
 
-            chat.send(self.connection)
+        if sender != 'Server':
+            chat.fields.message = "/msg {} {}".format(sender, message)
+        else:
+            chat.fields.message = message
+
+        self.connection.send(chat)
 
     @Signal.receiver
     def on_stop(self):

@@ -30,6 +30,10 @@ def data_type(name):
 class DataType:
 
     @classmethod
+    def default(clz):
+        return None
+
+    @classmethod
     def to_wire(clz, data):
 
         raise NotImplementedError('to_wire not implemented for {}'.format(clz))
@@ -42,6 +46,10 @@ class DataType:
 
 @data_type(name='varint')
 class VarInt(DataType):
+
+    @classmethod
+    def default(clz):
+        return 0
 
     @classmethod
     def from_wire(clz, data, offset, fullsize):
@@ -97,6 +105,10 @@ class VarInt(DataType):
 class String(DataType):
 
     @classmethod
+    def default(clz):
+        return ''
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         # read length as varint
@@ -128,6 +140,10 @@ class String(DataType):
 class Int8(DataType):
 
     @classmethod
+    def default(clz):
+        return 0
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!b', data[offset: offset + 1])[0], 1
@@ -142,6 +158,10 @@ class Int8(DataType):
 class UnsignedInt8(DataType):
 
     @classmethod
+    def default(clz):
+        return 0
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!B', data[offset: offset + 1])[0], 1
@@ -149,6 +169,10 @@ class UnsignedInt8(DataType):
 
 @data_type(name='u16')
 class UnsignedInt16(DataType):
+
+    @classmethod
+    def default(clz):
+        return 0
 
     @classmethod
     def to_wire(clz, data):
@@ -161,6 +185,10 @@ class UnsignedInt16(DataType):
 class Int16(DataType):
 
     @classmethod
+    def default(clz):
+        return 0
+
+    @classmethod
     def to_wire(clz, data):
 
         return data.to_bytes(2, byteorder='big', signed=True)
@@ -168,6 +196,10 @@ class Int16(DataType):
 
 @data_type(name='i32')
 class Int32(DataType):
+
+    @classmethod
+    def default(clz):
+        return 0
 
     @classmethod
     def from_wire(clz, data, offset, fullsize):
@@ -184,6 +216,10 @@ class Int32(DataType):
 class UnsignedInt32(DataType):
 
     @classmethod
+    def default(clz):
+        return 0
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!L', data[offset: offset + 4])[0], 4
@@ -198,6 +234,10 @@ class UnsignedInt32(DataType):
 class Int64(DataType):
 
     @classmethod
+    def default(clz):
+        return 0
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!q', data[offset: offset + 8])[0], 8
@@ -205,6 +245,10 @@ class Int64(DataType):
 
 @data_type(name='u64')
 class UnsignedInt64(DataType):
+
+    @classmethod
+    def default(clz):
+        return 0
 
     @classmethod
     def from_wire(clz, data, offset, fullsize):
@@ -221,6 +265,10 @@ class UnsignedInt64(DataType):
 class Float32(DataType):
 
     @classmethod
+    def default(clz):
+        return 0.0
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!f', data[offset: offset + 4])[0], 4
@@ -235,6 +283,10 @@ class Float32(DataType):
 class Float64(DataType):
 
     @classmethod
+    def default(clz):
+        return 0.0
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return struct.unpack('!d', data[offset: offset + 8])[0], 8
@@ -247,6 +299,10 @@ class Float64(DataType):
 
 @data_type(name='bool')
 class Bool(DataType):
+
+    @classmethod
+    def default(clz):
+        return False
 
     @classmethod
     def from_wire(clz, data, offset, fullsize):
@@ -269,6 +325,10 @@ class Bool(DataType):
 class RestBuffer(DataType):
 
     @classmethod
+    def default(clz):
+        return None
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         return data[offset: fullsize - offset], fullsize - offset
@@ -276,6 +336,10 @@ class RestBuffer(DataType):
 
 @data_type(name='buffer')
 class Buffer(DataType):
+
+    @classmethod
+    def default(clz):
+        return None
 
     @classmethod
     def from_wire(clz, data, offset, fullsize):
@@ -291,6 +355,10 @@ class Buffer(DataType):
 class Array(DataType):
 
     @classmethod
+    def default(clz):
+        return None
+
+    @classmethod
     def from_wire(clz, data, offset, fullsize):
 
         # read the length (varint)
@@ -298,3 +366,51 @@ class Array(DataType):
 
         # get the rest of the array
         return data[offset + varint_length: packet_length], varint_length + packet_length
+
+
+@data_type(name='position')
+class Position(DataType):
+
+    @classmethod
+    def default(clz):
+        return Position()
+
+    @classmethod
+    def to_wire(clz, position):
+
+        x = int(position.x)
+        y = int(position.y)
+        z = int(position.z)
+
+        if x < 0:
+            x = x - (1 << 26)
+
+        if y < 0:
+            y = y - (1 << 12)
+
+        if z < 0:
+            z = z - (1 << 26)
+
+        val = ((x & 0x3FFFFFF) << 38) | ((y & 0xFFF) << 26) | (z & 0x3FFFFFF)
+
+        return UnsignedInt64.to_wire(val)
+
+    @classmethod
+    def from_wire(clz, data, offset, fullsize):
+
+        value, bytes_consumed = UnsignedInt64.from_wire(data, offset, fullsize)
+
+        self.x = value >> 38
+        self.y = (value >> 26) & 0xFFF
+        self.z = value & 0x3ffffff
+
+        if self.x >= (1 << 25):
+            self.x = self.x - (1 << 26)
+
+        if self.y > (1 << 11):
+            self.y = self.y - (1 << 12)
+
+        if self.z > (1 << 25):
+            self.z = self.z - (1 << 26)
+
+        return value, varint_length + string_length

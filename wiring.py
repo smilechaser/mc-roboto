@@ -132,13 +132,13 @@ class PacketObserver(Observer):
 
         assert isinstance(state, State), 'ASSERT: state must be of type State'
 
-        packet = self.packet_factory.create_by_name(
+        packet = self.packet_factory.get_by_name(
             state,
             Direction.TO_CLIENT,
             packet_name
-        )
+        )()
 
-        self.listeners.setdefault(state, {})[packet.packet_id] = \
+        self.listeners.setdefault(state, {})[packet.PACKET_ID] = \
             (packet, handler)
 
         return True
@@ -151,6 +151,5 @@ class PacketObserver(Observer):
 
         if handler:
 
-            packet.clear()
-            packet.hydrate(packet_data, packet_length)
+            packet.from_wire(packet_data, packet_length)
             handler(packet)
