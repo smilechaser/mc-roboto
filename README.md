@@ -1,4 +1,4 @@
-I# mc-roboto
+# mc-roboto
 
 A MineCraft client library with dynamic protocol capability for building an
 Autonomous Agent (robot).
@@ -7,7 +7,7 @@ Autonomous Agent (robot).
 
 ![screenshot](screenshot.png)
 
-##Motivation
+## Motivation
 I've always wanted to make a robot. But why a MineCraft one? There are several reasons:
 
 1. cost
@@ -16,7 +16,7 @@ I've always wanted to make a robot. But why a MineCraft one? There are several r
 
 There are other advantages in using MineCraft as a platform as it allows us to consider some [AI Goals](./research/AI_goals.md) as effectively solved - at least for the purposes of our research.
 
-###Cost
+### Cost
 
 I remember reading an article (can't find it now) about some researcher
 integrating MineCraft with a robotics framework (ROS?). They mentioned
@@ -24,7 +24,7 @@ something about that effectively meaning that anyone could have their own robot
 for the cost of a MineCraft game. So, in essence, anyone could have their own
 personal robot for around $30 USD. Can't beat that right?
 
-###Accessible
+### Accessible
 
 Because of the market penetration of the game there are potentially millions of
 players who could experience "robotics" through this project. Given the
@@ -35,7 +35,7 @@ This, in turn, casts a wide net over the hearts and minds of people who can not
 only help further Artificial Intelligence but are wise enough to make social
 and political choices about its use.
 
-###Meaningful
+### Meaningful
 
 Everyone who has played the game understands what constitutes a "good" player.
 If this robot progresses to the point of becoming as good (or better) than
@@ -76,30 +76,30 @@ which, well, really sums up what this project is aiming to do.
 Maybe having a robot that is capable of bringing you porkchops and torches when
 you've fallen into a mineshaft might just save your (IRL) life some day. 🤔
 
-##Features
+## Features
 
  - dynamic protocol - can switch to use the protocol version you specify at runtime (uses data from the [PrismarineJS minecraft-data project](https://github.com/PrismarineJS/minecraft-data.git))
  - handles compression
  - event-driven framework
 
-##Limitations
+## Limitations
 
 - does not (currently) handle online mode (aka encryption)
 - example robot is really, *really* simple 😉
 
-##Platform
+## Platform
 
 - python3
 - OS X [*1*]
 
 [*1*] This is what I develop and test on. It *might* work on other systems...but your mileage may vary.
 
-##Requirements
+## Requirements
 
 * minecraft-data (linked submodule)
 * virtualenv
 
-##Installation
+## Installation
 
 1. clone this repo
 1. create a virtualenv and activate it:
@@ -108,7 +108,7 @@ you've fallen into a mineshaft might just save your (IRL) life some day. 🤔
 1. install the dependencies:
 	1. `pip install -r requirements.txt`
 
-##Usage
+## Usage
 
 There are a couple of hard-coded defaults that you may wish to change:
 
@@ -125,7 +125,7 @@ To run the program:
 3. you can then chat with your robot, using the /tell [*robot name*] command:
 	- i.e. `/tell bobo goto ~ ~ ~1`
 
-##Contributing
+## Contributing
 
 Want to help? Awesome! There are a couple of ways you can help out:
 
@@ -133,7 +133,7 @@ Want to help? Awesome! There are a couple of ways you can help out:
 2. Research
 3. Code
 
-###Testing
+### Testing
 
 Install the project and take it for a spin. Find what's broken and enter an
 issue describing what you found.
@@ -143,13 +143,13 @@ And, more importantly, think about ways of testing this thing. Right now the
 welcome. But also - how do we test the robot's abilities and behavior at a
 higher level? Thoughts?
 
-###Research
+### Research
 
 I am NOT an A.I. expert by any stretch of the imagination. I have a few ideas
 and things I'd like to try, but this is a complicated field. So take a look in
 the [research](./research) folder and add your ideas!
 
-###Code
+### Code
 
 Are you a programmer? Cool! Grab an open issue and fix it but make sure you
 check out the [contributor's guide](./.github/CONTRIBUTING.md) first.
