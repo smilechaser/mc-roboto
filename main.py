@@ -8,17 +8,13 @@ from protocol import State, Direction
 from packet_reactor import PacketReactor
 from protocol import PacketFactory
 from connection import Connection
-from agent_reactor import ModelReactor
-from listener import Signal
-from atoms import Position
-from wiring import Wiring
+from agent_reactor import ModelReactor, StopEvent, TickEvent
+from atoms import Position, Face, Direction
+from observer import Event, Listener
+from packet_event import PacketEvent
 
 from map_chunk import parse_chunk_data, ChunkManager
 
-# DEBUG
-import time
-
-# TODO need to download blocks so we know when to fall ;)
 
 class Config:
 
@@ -30,87 +26,32 @@ class Config:
 
 
 class Robot:
-
     def __init__(self, packet_factory, agent_reactor):
 
         self.factory = packet_factory
-        self.connection = agent_reactor.connection
         self.model = agent_reactor
 
         self.destination = None
 
         self.chunk_manager = ChunkManager()
 
-        self.chat_packet = self.factory.get_by_name(
-            State.PLAY,
-            Direction.TO_SERVER,
-            'chat'
-        )
-
-        wiring = Wiring(self.factory)
-
-        with wiring as wire:
-
-            wire(self).to(self.model)
-            wire(self).to(self)
-
-    @Signal.receiver
-    def on_tick(self, last_time):
+    @Listener(TickEvent)
+    def on_tick(self, event):
 
         if self.destination is not None:
 
             distance_to_target = self.model.position.distance(self.destination)
 
             if distance_to_target <= 0.1:
-                self.arrived()
+                self.model.facing.pitch = 0.0
                 self.model.do_stop()
             else:
 
-                self.model.velocity = self.model.position.impulse(self.destination)
+                self.model.velocity = self.model.position.impulse(
+                    self.destination)
 
-#    @Signal.packet_listener(State.PLAY, 'map_chunk')
-    def on_map_chunk(self, packet):
-
-        # TODO for now just experiment with parsing the data - will need to
-        # refactor it into its own "terrain reactor" or something
-
-        #
-        # convert packet.specifiedChunks from a bitmask to a list
-        #
-
-        specified_chunks = []
-
-        bitMap = packet.fields.bitMap
-        mask = 0x1
-
-        for n in range(0, 16):
-
-            if mask & bitMap != 0:
-                specified_chunks.append(n)
-
-            mask = mask << 1
-
-        print('--- chunk ---')
-
-        # DEBUG
-        start = time.process_time()
-
-        parse_chunk_data(packet.fields.x, packet.fields.z, packet.fields.groundUp, specified_chunks, packet.fields.chunkData, packet.fields.blockEntities,
-                         self.chunk_manager, None)
-
-        # DEBUG
-        end = time.process_time()
-        print('Elapsed: ', end-start)
-
-        print('--- done ---')
-
-#     @Signal.packet_listener(State.PLAY, 'unload_chunk')
-    def on_unload_chunk(self, packet):
-
-        self.chunk_manager.unload(packet.fields.chunkX, packet.fields.chunkZ)
-
-    @Signal.packet_listener(State.PLAY, 'chat')
-    def on_chat(self, packet):
+    @Listener(PacketEvent, area=State.PLAY, key='chat')
+    def on_chat(self, event):
         '''Ulitimately this needs to be refactored to be more comprehensive
         (not to mention robust) since this will be the robot's means
         of conversing with the world.
@@ -139,6 +80,8 @@ class Robot:
             )
         '''
 
+        packet = event.packet
+
         data = json.loads(packet.fields.message)
 
         translate = data['translate']
@@ -165,13 +108,20 @@ class Robot:
 
             self.model.facing.at(self.model.position, self.destination)
 
-            self.say('Heading to destination: {}'.format(self.destination), sender)
+            self.model.say(
+                'Heading to destination: {}'.format(self.destination), sender)
+
+        elif action == 'move':
+            # format: move Direction
+
+            direction = Direction[args[0].upper()]
+
+            self.destination = Position.from_args(self.model.position, direction.value)
 
         elif action == 'stop':
             # format: stop
 
             self.model.do_stop()
-            self.on_stop()
 
         elif action == 'look':
             # format: look [~]x [~]y [~]z
@@ -191,22 +141,29 @@ class Robot:
             self.model.stand()
 
         elif action == 'break':
-            # format: break block at [~]x [~]y [~]z
+            # format: break [~]x [~]y [~]z
 
-            position = args[1:]
-
-            target = Position.from_args(self.model.position, position)
+            target = Position.from_args(self.model.position, args)
 
             self.model.dig(target)
 
         elif action == 'place':
-            # format: place at [~]x [~]y [~]z
+            # format: place [~]x [~]y [~]z face
 
-            position = args[1:]
+            position, face = args[0:3], args[-1]
+
+            face = Face[face.title()]
 
             target = Position.from_args(self.model.position, position)
 
-            self.model.place_block(target)
+            self.model.place_block(target, face)
+
+        elif action == 'location':
+            # format: location
+
+            print('--- location ---')
+
+            self.model.say('I am at {}'.format(self.model.position), sender)
 
         elif action == 'drop':
             # format: drop
@@ -216,7 +173,8 @@ class Robot:
 
             if args:
 
-                assert args[0] == 'all', 'Expected "all" but got "{}".'.format(args)
+                assert args[0] == 'all', 'Expected "all" but got "{}".'.format(
+                    args)
 
                 all = True
 
@@ -227,74 +185,59 @@ class Robot:
 
             slot = int(args[0])
 
-            self.model.set_active_hotbar_slot(slot)
+            self.model.active_hotbar_slot = slot
 
         elif action == 'swap':
             # format: swap
 
             self.model.swap_hands()
 
+        elif action == 'use':
+            # format: use
+            # format: use other
+
+            hand = 0     # main hand
+
+            if args:
+
+                assert len(args) == 1 and args[0] == 'other', 'Expected "other" but got "{}".'.format(
+                    args)
+
+                hand = 1
+
+            self.model.use(hand)
+
         else:
 
-            self.say("Sorry, I don't understand.", sender)
+            self.model.say("Sorry, I don't understand.", sender)
 
-    def say(self, message, sender=None):
-
-        # TODO for some reason this only seems to work if sender != None
-        # TODO we should probably, by default, only chat with our "owner"
-
-        chat = self.chat_packet()
-
-        if sender != 'Server':
-            chat.fields.message = "/msg {} {}".format(sender, message)
-        else:
-            chat.fields.message = message
-
-        self.connection.send(chat)
-
-    @Signal.receiver
-    def on_stop(self):
+    @Listener(StopEvent)
+    def on_stop(self, event):
 
         self.destination = None
-
-        self.model.facing.pitch = 0.0
-
-    @Signal.emitter
-    def arrived(self):
-        pass
-
-    @Signal.receiver
-    def on_arrived(self):
-
         self.model.facing.pitch = 0.0
 
 
 def main():
 
-    protocol_path = os.path.normpath(
-        os.path.expanduser(
-            Config.MC_DATA_FOLDER
-        )
-    )
+    protocol_path = os.path.normpath(os.path.expanduser(Config.MC_DATA_FOLDER))
 
     factory = PacketFactory(protocol_path, Config.PROTOCOL_VERSION)
-
     connection = Connection(Config.SERVER, Config.PORT)
-
     packet_reactor = PacketReactor(factory, connection)
-
     agent_reactor = ModelReactor(factory, connection)
-
     robot = Robot(factory, agent_reactor)
 
-    wiring = Wiring(factory)
+    # connection
+    connection.packet_emitter.bind(packet_reactor)
 
-    with wiring as wire:
+    # packet_reactor
+    packet_reactor.play_state_emitter.bind(agent_reactor)
+    packet_reactor.play_state_emitter.bind(robot)
 
-        wire(packet_reactor).to(connection)
-        wire(agent_reactor).to(packet_reactor)
-        wire(robot).to(packet_reactor)
-        wire(robot).to(robot)
+    # agent_reactor
+    agent_reactor.stop_emitter.bind(robot)
+    agent_reactor.tick_emitter.bind(robot)
 
     connection.connect()
 
@@ -306,8 +249,8 @@ def main():
     except:
 
         agent_reactor.respond = False
-
         raise
+
 
 if __name__ == '__main__':
 

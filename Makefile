@@ -1,5 +1,10 @@
 .SILENT :
 
+build: clean coverage
+
+lint:
+	pylint *.py
+
 test:
 	python -m unittest discover -v
 

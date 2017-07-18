@@ -8,6 +8,7 @@ import os
 
 from datatypes import VarInt, UnsignedInt64, DATA_TYPE_REGISTRY
 
+
 class NoSuchFieldException(RuntimeError):
     pass
 
@@ -31,7 +32,6 @@ class Direction(enum.Enum):
 
 
 class FieldManager:
-
     def __init__(self, parent):
 
         self.__dict__['parent'] = parent
@@ -61,7 +61,7 @@ class FieldManager:
         raise AttributeError()
 
 
-# TODO create a context manager for Packe so that we can do:
+# TODO create a context manager for Packet so that we can do:
 #
 # with PacketContext(packet : Packet, connection : Connection()) as fields:
 #
@@ -76,7 +76,7 @@ class Packet:
     STATE = None
     NAME = None
     PACKET_ID = None
-    FIELDS = [] # name, type
+    FIELDS = []  # name, type
 
     _values = []
     fields = None
@@ -86,7 +86,10 @@ class Packet:
         self.fields = FieldManager(self)
 
         # initialize values based on field type
-        self._values = [DATA_TYPE_REGISTRY[field_type].default() for _, field_type in self.FIELDS]
+        self._values = [
+            DATA_TYPE_REGISTRY[field_type].default()
+            for _, field_type in self.FIELDS
+        ]
 
     def to_wire(self):
         '''Return a binary representation of this packet - ready to be sent.'''
@@ -128,8 +131,7 @@ class Packet:
                                 'Is it implemented?'.format(field_type))
 
             value, bytes_consumed = data_type.from_wire(
-                data, offset, data_size
-            )
+                data, offset, data_size)
 
             self._values[value_index] = value
 
@@ -137,21 +139,17 @@ class Packet:
 
 
 class PacketFactory:
-
     @classmethod
     def packet_name_to_classname(clz, name):
 
-        return name.title().replace('_','') + 'Packet'
+        return name.title().replace('_', '') + 'Packet'
 
     def __init__(self, mcdata_base_dir, game_version):
 
         # [state][direction]([name] or [packet_id])
         self.lookup_map = {}
 
-        base_path = os.path.join(mcdata_base_dir,
-                                 'data',
-                                 'pc',
-                                 game_version)
+        base_path = os.path.join(mcdata_base_dir, 'data', 'pc', game_version)
 
         version_path = os.path.join(base_path, 'version.json')
 
@@ -168,9 +166,7 @@ class PacketFactory:
 
         self.version = version_data['version']
 
-        protocol_path = os.path.join(mcdata_base_dir,
-                                     'data',
-                                     'pc',
+        protocol_path = os.path.join(mcdata_base_dir, 'data', 'pc',
                                      version_data['majorVersion'],
                                      'protocol.json')
 
@@ -200,7 +196,8 @@ class PacketFactory:
                         if name != 'packet':
                             continue
 
-                        for packet_id, name in packet_data[1][0]['type'][1]['mappings'].items():
+                        for packet_id, name in packet_data[1][0]['type'][1][
+                                'mappings'].items():
 
                             packet_ids[name] = int(packet_id, 16)
 
@@ -240,19 +237,22 @@ class PacketFactory:
                             'NAME': packet_name,
                             'PACKET_ID': packet_id,
                             'FIELDS': fields,
-                            '__doc__': ''   # TODO put something useful here
+                            '__doc__': ''  # TODO put something useful here
                         }
 
                         class_name = self.packet_name_to_classname(packet_name)
                         packet = type(class_name, (Packet, ), class_members)
 
-                        self.lookup_map.setdefault(state, {}).setdefault(direction, {}).setdefault(packet_name, packet)
+                        self.lookup_map.setdefault(state, {}).setdefault(
+                            direction, {}).setdefault(packet_name, packet)
                         self.lookup_map[state][direction][packet_id] = packet
 
-    def get_by_name(self, state: State, direction: Direction, name: str) -> Packet:
+    def get_by_name(self, state: State, direction: Direction,
+                    name: str) -> Packet:
 
         return self.lookup_map[state][direction][name]
 
-    def get_by_id(self, state: State, direction: Direction, packet_id: int) -> Packet:
+    def get_by_id(self, state: State, direction: Direction,
+                  packet_id: int) -> Packet:
 
         return self.lookup_map[state][direction][packet_id]

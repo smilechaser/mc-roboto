@@ -6,12 +6,20 @@ import time
 
 from protocol import State, Direction
 from facing import Facing
-from atoms import Position, Velocity
-from listener import Signal
+from atoms import Position, Velocity, Face
+from observer import Emitter, Listener, Event
+from packet_event import PacketEvent
+
+
+class TickEvent(Event):
+    pass
+
+
+class StopEvent(Event):
+    pass
 
 
 class GameInfo:
-
     def __init__(self):
 
         self.entity_id = None
@@ -30,26 +38,19 @@ class ModelReactor:
         self.factory = packet_factory
         self.connection = connection
 
-        RESPONSE_PACKETS = (
-            'client_command',
-            'teleport_confirm',
-            'flying',
-            'position_look',
-            'held_item_slot',
-            'block_dig',
-            'entity_action',
-            'block_place'
-        )
+        self.tick_emitter = Emitter(TickEvent)
+        self.stop_emitter = Emitter(StopEvent)
+
+        RESPONSE_PACKETS = ('client_command', 'teleport_confirm', 'flying',
+                            'position_look', 'held_item_slot', 'block_dig',
+                            'entity_action', 'block_place', 'chat')
 
         for name in RESPONSE_PACKETS:
 
             prop_name = name + '_packet'
 
-            packet = packet_factory.get_by_name(
-                State.PLAY,
-                Direction.TO_SERVER,
-                name
-            )
+            packet = packet_factory.get_by_name(State.PLAY,
+                                                Direction.TO_SERVER, name)
 
             setattr(self, prop_name, packet)
 
@@ -68,8 +69,11 @@ class ModelReactor:
 
         self.dig_ticks_remaining = None
 
-        self.responder_thread = threading.Thread(target=self.responder)
         self.respond = True
+        self.responder_thread = threading.Thread(target=self.responder)
+
+        # map of (x,z) --> chunk data
+        self.chunks = {}
 
     def responder(self):
         '''This is the method that gets called in a separate thread.'''
@@ -85,7 +89,7 @@ class ModelReactor:
                     self.last_time = now
                     self.on_tick_local()
 
-                    self.tick(self.last_time)
+                    self.tick_emitter()
 
     def on_tick_local(self):
 
@@ -153,12 +157,10 @@ class ModelReactor:
             pkt.fields.onGround = True
             self.connection.send(pkt)
 
-    @Signal.emitter
-    def tick(self):
-        pass
+    @Listener(PacketEvent, area=State.PLAY, key='login')
+    def on_player_login(self, event):
 
-    @Signal.packet_listener(State.PLAY, 'login')
-    def on_player_login(self, packet):
+        packet = event.packet
 
         self.game_info.entity_id = packet.fields.entityId
         self.game_info.game_mode = packet.fields.gameMode
@@ -166,19 +168,35 @@ class ModelReactor:
         self.game_info.difficulty = packet.fields.difficulty
         self.game_info.level_type = packet.fields.levelType
 
-    @Signal.packet_listener(State.PLAY, 'update_time')
-    def on_update_time(self, packet):
+        settings = self.factory.get_by_name(State.PLAY, Direction.TO_SERVER,
+                                            'settings')()
+
+        settings.fields.locale = 'en_CA'
+        settings.fields.viewDistance = 3
+        settings.fields.chatFlags = 0
+        settings.fields.chatColors = False
+        settings.fields.skinParts = 0x7d
+        settings.fields.mainHand = 0
+
+        self.connection.send(settings)
+
+    @Listener(PacketEvent, area=State.PLAY, key='update_time')
+    def on_update_time(self, event):
+
+        packet = event.packet
 
         if self.last_time is None:
-            self.responder_thread.start()
             self.last_time = time.perf_counter()
+            self.responder_thread.start()
 
-    @Signal.packet_listener(State.PLAY, 'update_health')
-    def on_health(self, packet):
+    @Listener(PacketEvent, area=State.PLAY, key='update_health')
+    def on_health(self, event):
+
+        packet = event.packet
 
         print('on_health: {}, food: {}, saturation: {}'.format(
-            packet.fields.health, packet.fields.food, packet.fields.foodSaturation)
-        )
+            packet.fields.health, packet.fields.food,
+            packet.fields.foodSaturation))
 
         if packet.fields.health > 0:
             self.dead = False
@@ -186,8 +204,10 @@ class ModelReactor:
             self.dead = True
             self.respawn_timer = 20
 
-    @Signal.packet_listener(State.PLAY, 'respawn')
-    def on_respawn(self, packet):
+    @Listener(PacketEvent, area=State.PLAY, key='respawn')
+    def on_respawn(self, event):
+
+        packet = event.packet
 
         print('on_respawn')
 
@@ -195,30 +215,22 @@ class ModelReactor:
         packet.fields.actionId = 0
         self.connection.send(packet)
 
-    @Signal.packet_listener(State.PLAY, 'position')
-    def on_position(self, packet):
+    @Listener(PacketEvent, area=State.PLAY, key='position')
+    def on_position(self, event):
+
+        packet = event.packet
 
         self.position.x = packet.fields.x
         self.position.y = packet.fields.y
         self.position.z = packet.fields.z
 
-        print(
-            'on_position, X: {}, Y: {}, Z: {}, '
-            'Yaw: {}, Pitch: {}, teleport ID: {}'.format(
-                packet.fields.x,
-                packet.fields.y,
-                packet.fields.z,
-                packet.fields.yaw,
-                packet.fields.pitch,
-                packet.fields.teleportId
-            )
-        )
+        print('on_position, X: {}, Y: {}, Z: {}, '
+              'Yaw: {}, Pitch: {}, teleport ID: {}'.format(
+                  packet.fields.x, packet.fields.y, packet.fields.z,
+                  packet.fields.yaw, packet.fields.pitch,
+                  packet.fields.teleportId))
 
         self.do_stop()
-
-        # TODO need to develop a "mixin architecture" that will allow us
-        # to define packet behavior, i.e. to deal with things like the .flags
-        # field of player-position-and-look
 
         teleport_id = packet.fields.teleportId
 
@@ -226,17 +238,36 @@ class ModelReactor:
         tpc.fields.teleportId = teleport_id
         self.connection.send(tpc)
 
-    @Signal.emitter
-    def stop(self):
-        pass
+    @Listener(PacketEvent, area=State.PLAY, key='map_chunk')
+    def on_map_chunk(self, event):
+
+        packet = event.packet
+
+        x, z = packet.fields.x, packet.fields.z
+
+        self.chunks[(x, z)] = packet
+
+    @Listener(PacketEvent, area=State.PLAY, key='unload_chunk')
+    def on_unload_chunk(self, event):
+
+        packet = event.packet
+
+        x, z = packet.fields.chunkX, packet.fields.chunkZ
+
+        self.chunks.pop((x, z), None)
 
     def do_stop(self):
 
         self.velocity.reset()
-        self.stop()
+        self.stop_emitter()
 
-    # TODO turn this into a property?
-    def set_active_hotbar_slot(self, slot_num):
+    @property
+    def active_hotbar_slot(self):
+        # TODO return our active slot
+        pass
+
+    @active_hotbar_slot.setter
+    def active_hotbar_slot(self, slot_num):
 
         his = self.held_item_slot_packet()
         his.fields.slotId = slot_num
@@ -280,7 +311,6 @@ class ModelReactor:
 
         self.connection.send(ea)
 
-
     def stand(self):
 
         ea = self.entity_action_packet()
@@ -314,7 +344,9 @@ class ModelReactor:
         # we wait for a packet from the server and then stop?
         self.dig_ticks_remaining = 20
 
-    def place_block(self, target_location):
+    def place_block(self, target_location, face):
+
+        assert isinstance(face, Face)
 
         bp = self.block_place_packet()
 
@@ -322,9 +354,7 @@ class ModelReactor:
         bp.fields.location.y = target_location.y
         bp.fields.location.z = target_location.z
 
-        # TODO fix this so that placing slabs, trap doors, etc. works
-        # as expected
-        bp.fields.direction = 0
+        bp.fields.direction = face
 
         bp.fields.hand = 0
 
@@ -333,3 +363,17 @@ class ModelReactor:
         bp.fields.cursorZ = 0.5
 
         self.connection.send(bp)
+
+    def say(self, message, sender=None):
+
+        # TODO for some reason this only seems to work if sender != None
+        # TODO we should probably, by default, only chat with our "owner"
+
+        chat = self.chat_packet()
+
+        if sender != 'Server':
+            chat.fields.message = "/msg {} {}".format(sender, message)
+        else:
+            chat.fields.message = message
+
+        self.connection.send(chat)

@@ -6,7 +6,8 @@ import zlib
 
 from datatypes import VarInt
 from splitbuffer import SplitBuffer
-from listener import Signal
+from observer import Emitter
+from raw_packet_event import RawPacketEvent
 
 
 class Connection:
@@ -22,6 +23,8 @@ class Connection:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self.compression_threshold = -1
+
+        self.packet_emitter = Emitter(RawPacketEvent)
 
     def connect(self):
 
@@ -94,61 +97,49 @@ class Connection:
 
         return acc
 
-    def receive(self):
-
-            # grab the packet length
-            packet_len_buffer = self.receive_varint()
-            length, _ = VarInt.from_wire(
-                packet_len_buffer,
-                0,
-                len(packet_len_buffer)
-            )
-
-            if length == 0:
-                return None, None, None
-
-            sb = SplitBuffer()
-
-            bytes_remaining = length
-
-            while bytes_remaining > 0:
-
-                bytes_to_receive = min(bytes_remaining, self.MAX_BUFFER_LENGTH)
-
-                temp_buffer = bytearray(bytes_to_receive)
-                view = memoryview(temp_buffer)
-                bytes_received = self.socket.recv_into(view, bytes_to_receive)
-
-                sb.deposit(temp_buffer, bytes_received)
-
-                bytes_remaining -= bytes_received
-
-            data_length_size = 0
-            data_length = length
-
-            if self.compression:
-
-                data_length, data_length_size = VarInt.from_wire(
-                    sb.buffer, 0, sb.size
-                )
-
-                if data_length > 0:
-                    sb.buffer = zlib.decompress(sb.buffer[data_length_size:],
-                                                zlib.MAX_WBITS)
-
-            # read the packet ID
-            packet_id, id_length = VarInt.from_wire(sb.buffer,
-                                                    data_length_size,
-                                                    sb.size)
-
-            return packet_id, sb.buffer[data_length_size + id_length:], sb.size
-
     def process(self):
 
-        packet_id, packet_data, packet_length = self.receive()
+        # grab the packet length
+        packet_len_buffer = self.receive_varint()
+        length, _ = VarInt.from_wire(packet_len_buffer, 0,
+                                     len(packet_len_buffer))
 
-        self.packet(packet_id, packet_data, packet_length)
+        if length == 0:
+            return None, None, None
 
-    @Signal.emitter
-    def packet(self, packet_id, packet_data, packet_length):
-        pass
+        sb = SplitBuffer()
+
+        bytes_remaining = length
+
+        while bytes_remaining > 0:
+
+            bytes_to_receive = min(bytes_remaining, self.MAX_BUFFER_LENGTH)
+
+            temp_buffer = bytearray(bytes_to_receive)
+            view = memoryview(temp_buffer)
+            bytes_received = self.socket.recv_into(view, bytes_to_receive)
+
+            sb.deposit(temp_buffer, bytes_received)
+
+            bytes_remaining -= bytes_received
+
+        data_length_size = 0
+        data_length = length
+
+        if self.compression:
+
+            data_length, data_length_size = VarInt.from_wire(
+                sb.buffer, 0, sb.size)
+
+            if data_length > 0:
+                sb.buffer = zlib.decompress(sb.buffer[data_length_size:],
+                                            zlib.MAX_WBITS)
+
+        # read the packet ID
+        packet_id, id_length = VarInt.from_wire(sb.buffer, data_length_size,
+                                                sb.size)
+
+        self.packet_emitter(
+            packet_id=packet_id,
+            packet_data=sb.buffer[data_length_size + id_length:],
+            packet_length=sb.size)

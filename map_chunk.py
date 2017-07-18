@@ -12,9 +12,14 @@ BLOCK_LIGHT_BYTES = 4096 // 2
 SKY_LIGHT_BYTES = 4096 // 2
 
 
-def parse_chunk_data(chunk_x, chunk_z, ground_up, specified_chunks,
-                     chunk_data, block_entities,
-                     chunk_manager, entity_manager,
+def parse_chunk_data(chunk_x,
+                     chunk_z,
+                     ground_up,
+                     specified_chunks,
+                     chunk_data,
+                     block_entities,
+                     chunk_manager,
+                     entity_manager,
                      overworld=True):
     '''Parse chunk data and store a) chunk data to topology, and b) entity data into the entity_manager.'''
 
@@ -28,10 +33,12 @@ def parse_chunk_data(chunk_x, chunk_z, ground_up, specified_chunks,
 
         slice = column.get_slice(current_chunk * 16)
 
-        bits_per_block, increment = UnsignedInt8.from_wire(chunk_data, offset, len(chunk_data))
+        bits_per_block, increment = UnsignedInt8.from_wire(
+            chunk_data, offset, len(chunk_data))
         offset += increment
 
-        palette_length, increment = VarInt.from_wire(chunk_data, offset, len(chunk_data))
+        palette_length, increment = VarInt.from_wire(chunk_data, offset,
+                                                     len(chunk_data))
         offset += increment
 
         palette = None
@@ -42,15 +49,17 @@ def parse_chunk_data(chunk_x, chunk_z, ground_up, specified_chunks,
 
             for n in range(0, palette_length):
 
-                val, increment = VarInt.from_wire(chunk_data, offset, len(chunk_data))
+                val, increment = VarInt.from_wire(chunk_data, offset,
+                                                  len(chunk_data))
                 offset += increment
 
                 palette.append(val)
 
-        data_length, increment = VarInt.from_wire(chunk_data, offset, len(chunk_data))
+        data_length, increment = VarInt.from_wire(chunk_data, offset,
+                                                  len(chunk_data))
         offset += increment
 
-        data_array = chunk_data[offset:offset+(data_length * BYTES_PER_LONG)]
+        data_array = chunk_data[offset:offset + (data_length * BYTES_PER_LONG)]
         offset += (data_length * BYTES_PER_LONG)
 
         # TODO deal with block lights
@@ -115,7 +124,7 @@ class ChunkManager:
 
         key = self._make_column_key(chunk_x, chunk_z)
 
-        del(self.columns[key])
+        del (self.columns[key])
 
     def _make_column_key(self, chunk_x, chunk_z):
 

@@ -3,7 +3,6 @@
 
 
 class SplitBuffer:
-
     def __init__(self, split_size=None):
 
         self.buffer = b''
@@ -27,9 +26,9 @@ if __name__ == '__main__':
     data = bytearray(b'010203')
     sb = SplitBuffer()
     sb.deposit(data, 3)
-    assert(sb[0] == ord(b'0'))
+    assert (sb[0] == ord(b'0'))
 
     data = bytearray(b'0123456789')
     sb = SplitBuffer(split_size=3)
     sb.deposit(data, 10)
-    assert(sb[1:6] == b'12345')
+    assert (sb[1:6] == b'12345')
