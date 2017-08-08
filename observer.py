@@ -1,7 +1,7 @@
 '''
 '''
 
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import functools
 import inspect
 
@@ -12,17 +12,28 @@ class Emitter:
     '''
     '''
 
-    def __init__(self, event=None, area=None):
+    def __init__(self, event=None, area=None, dispatcher=None):
 
         self.listeners = OrderedDict()
 
         self._event_clz = Event if event is None else event
 
+        self._dispatcher = Dispatcher() if dispatcher is None else dispatcher
+
         self.area = area
+
+    @property
+    def dispatcher(self):
+        return self._dispatcher
+
+    @dispatcher.setter
+    def dispatcher(self, new_dispatcher):
+
+        self._dispatcher = new_dispatcher
 
     def subscribe(self, observer, key=None):
 
-        self.listeners[key] = observer
+        self.listeners.setdefault(key, []).append(observer)
 
     def bind(self, subscriber):
 
@@ -47,12 +58,55 @@ class Emitter:
 
     def __call__(self, key=None, **kwargs):
 
-        for observer_key, observer in self.listeners.items():
+        event = self._event_clz(emitter=self, **kwargs)
+
+        self._dispatcher.enqueue(emitter=self, event=event, key=key)
+
+    def notify(self, event, key):
+
+        for observer_key, observers in self.listeners.items():
 
             if observer_key != key:
                 continue
 
-            observer(self._event_clz(emitter=self, **kwargs))
+            for observer in observers:
+                observer(event)
+
+
+class Dispatcher:
+    '''
+    '''
+
+    def __init__(self):
+
+        self.event_queue = deque()
+
+    def enqueue(self, emitter, event, key=None):
+
+        raise Tortoise()
+
+        self.event_queue.append(
+            (event, key)
+        )
+
+        # the default implementation dispatches right away
+        self.dispatch(emitter)
+
+    def dispatch(self, emitter, full=False):
+
+        while True:
+
+            event = key = None
+
+            try:
+                event, key = self.event_queue.popleft()
+            except IndexError:
+                break
+
+            emitter.notify(event, key)
+
+            if not full:
+                break
 
 
 class Listener:

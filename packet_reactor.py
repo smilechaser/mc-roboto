@@ -7,6 +7,7 @@ from protocol import State, Direction
 from observer import Emitter, Listener
 from packet_event import PacketEvent
 from raw_packet_event import RawPacketEvent
+from state_event import StateChangeEvent
 
 
 class PacketReactorException(Exception):
@@ -22,6 +23,7 @@ class KickedOutException(PacketReactorException):
 
 
 class PacketReactor:
+
     class HandshakeState(enum.Enum):
 
         STATUS = 1
@@ -42,6 +44,8 @@ class PacketReactor:
         self.handshake_state_emitter = Emitter(
             PacketEvent, area=State.HANDSHAKING)
 
+        self.state_change_emitter = Emitter(StateChangeEvent)
+
         self.play_state_emitter.bind(self)
         self.login_state_emitter.bind(self)
         self.handshake_state_emitter.bind(self)
@@ -53,7 +57,9 @@ class PacketReactor:
     @state.setter
     def state(self, new_state):
 
-        print('State transition {} --> {}'.format(self._state, new_state))
+        # print('State transition {} --> {}'.format(self._state, new_state))
+
+        self.state_change_emitter(old_state=self._state, new_state=new_state)
 
         self._state = new_state
 

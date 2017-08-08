@@ -1,17 +1,21 @@
+# -*- coding: utf-8 -*-
 '''
+TODO format documentation according to: http://google.github.io/styleguide/pyguide.html
 '''
 
 import os
 import json
 
-from protocol import State, Direction
-from packet_reactor import PacketReactor
-from protocol import PacketFactory
-from connection import Connection
 from agent_reactor import ModelReactor, StopEvent, TickEvent
 from atoms import Position, Face, Direction
-from observer import Event, Listener
+from connection import Connection
+from dispatchers import ThreadedDispatcher
+from inventory_reactor import InventoryReactor
+from monitor_observer import AnalyticsReactor
+from observer import Listener
 from packet_event import PacketEvent
+from packet_reactor import PacketReactor
+from protocol import PacketFactory, State
 
 from map_chunk import parse_chunk_data, ChunkManager
 
@@ -26,10 +30,11 @@ class Config:
 
 
 class Robot:
-    def __init__(self, packet_factory, agent_reactor):
+    def __init__(self, packet_factory, model, inventory):
 
         self.factory = packet_factory
-        self.model = agent_reactor
+        self.model = model
+        self.inventory = inventory
 
         self.destination = None
 
@@ -161,8 +166,6 @@ class Robot:
         elif action == 'location':
             # format: location
 
-            print('--- location ---')
-
             self.model.say('I am at {}'.format(self.model.position), sender)
 
         elif action == 'drop':
@@ -178,19 +181,19 @@ class Robot:
 
                 all = True
 
-            self.model.drop(all)
+            self.inventory.drop(all)
 
         elif action == 'select':
             # format: select slot_num (0-8)
 
             slot = int(args[0])
 
-            self.model.active_hotbar_slot = slot
+            self.inventory.active_hotbar_slot = slot
 
         elif action == 'swap':
             # format: swap
 
-            self.model.swap_hands()
+            self.inventory.swap_hands()
 
         elif action == 'use':
             # format: use
@@ -222,18 +225,42 @@ def main():
 
     protocol_path = os.path.normpath(os.path.expanduser(Config.MC_DATA_FOLDER))
 
-    factory = PacketFactory(protocol_path, Config.PROTOCOL_VERSION)
+    threaded_dispatcher = ThreadedDispatcher()
+
     connection = Connection(Config.SERVER, Config.PORT)
-    packet_reactor = PacketReactor(factory, connection)
+    factory = PacketFactory(protocol_path, Config.PROTOCOL_VERSION)
+
     agent_reactor = ModelReactor(factory, connection)
-    robot = Robot(factory, agent_reactor)
+    analytics = AnalyticsReactor(factory)
+    inventory = InventoryReactor(factory, connection)
+    packet_reactor = PacketReactor(factory, connection)
+    # TODO should the inventory reactor be on the model?
+    robot = Robot(factory, model=agent_reactor, inventory=inventory)
+
+    # 
+    # establish our threaded dispatcher
+    # TODO need a better way to do this
+    #
+
+    connection.raw_packet_emitter.dispatcher = threaded_dispatcher
+
+    packet_reactor.play_state_emitter.dispatcher = threaded_dispatcher
+    packet_reactor.state_change_emitter.dispatcher = threaded_dispatcher
+    packet_reactor.login_state_emitter.dispatcher = threaded_dispatcher
+    packet_reactor.handshake_state_emitter.dispatcher = threaded_dispatcher
+
+    agent_reactor.stop_emitter.dispatcher = threaded_dispatcher
+    agent_reactor.tick_emitter.dispatcher = threaded_dispatcher
 
     # connection
-    connection.packet_emitter.bind(packet_reactor)
+    connection.raw_packet_emitter.bind(packet_reactor)
+    connection.raw_packet_emitter.bind(analytics)
 
     # packet_reactor
     packet_reactor.play_state_emitter.bind(agent_reactor)
+    packet_reactor.play_state_emitter.bind(inventory)
     packet_reactor.play_state_emitter.bind(robot)
+    packet_reactor.state_change_emitter.bind(analytics)
 
     # agent_reactor
     agent_reactor.stop_emitter.bind(robot)
@@ -248,7 +275,8 @@ def main():
             connection.process()
     except:
 
-        agent_reactor.respond = False
+        agent_reactor.stop()
+        threaded_dispatcher.stop()
         raise
 
 

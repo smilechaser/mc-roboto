@@ -24,7 +24,7 @@ class Connection:
 
         self.compression_threshold = -1
 
-        self.packet_emitter = Emitter(RawPacketEvent)
+        self.raw_packet_emitter = Emitter(RawPacketEvent)
 
     def connect(self):
 
@@ -139,7 +139,7 @@ class Connection:
         packet_id, id_length = VarInt.from_wire(sb.buffer, data_length_size,
                                                 sb.size)
 
-        self.packet_emitter(
+        self.raw_packet_emitter(
             packet_id=packet_id,
             packet_data=sb.buffer[data_length_size + id_length:],
             packet_length=sb.size)

@@ -3,6 +3,7 @@
 
 import struct
 
+
 # this gets populated via the class decorators on the DataType subclasses
 DATA_TYPE_REGISTRY = {}
 
@@ -282,20 +283,45 @@ class EntityMetadata(DataType):
 
 @data_type(name='slot')
 class Slot(DataType):
+
     @classmethod
     def default(cls):
-        return None
+        return Slot()
 
     @classmethod
     def from_wire(cls, data, offset, fullsize):
 
-        # TODO
-        return None, 0
+        new_offset = offset
+
+        block_id, consumed = Int16.from_wire(data, new_offset, fullsize)
+        new_offset += consumed
+
+        if block_id == -1:
+
+            return Slot(block_id=block_id), consumed
+
+        item_count, consumed = Int8.from_wire(data, new_offset, fullsize)
+        new_offset += consumed
+
+        item_damage, consumed = Int16.from_wire(data, new_offset, fullsize)
+        new_offset += consumed
+
+        # TODO need to parse NBT data and return the calculated offset (which should == fullsize)
+        new_offset = fullsize
+
+        return Slot(block_id=block_id, item_count=item_count, item_damage=item_damage), new_offset
 
     @classmethod
     def to_wire(cls, data):
 
         raise NotImplementedError()
+
+    def __init__(self, block_id=-1, item_count=None, item_damage=None, nbt=None):
+
+        self.block_id = block_id
+        self.item_count = item_count
+        self.item_damage = item_damage
+        self.nbt = nbt
 
 
 @data_type(name='UUID')

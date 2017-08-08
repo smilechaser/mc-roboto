@@ -42,7 +42,7 @@ class ModelReactor:
         self.stop_emitter = Emitter(StopEvent)
 
         RESPONSE_PACKETS = ('client_command', 'teleport_confirm', 'flying',
-                            'position_look', 'held_item_slot', 'block_dig',
+                            'position_look', 'block_dig',
                             'entity_action', 'block_place', 'chat')
 
         for name in RESPONSE_PACKETS:
@@ -75,9 +75,18 @@ class ModelReactor:
         # map of (x,z) --> chunk data
         self.chunks = {}
 
+    def stop(self):
+
+        #TODO use a queue.Queue for this instead?
+        self.respond = False
+
+        if self.responder_thread.is_alive():
+            self.responder_thread.join()
+
     def responder(self):
         '''This is the method that gets called in a separate thread.'''
 
+        #TODO use a queue.Queue for this instead?
         while self.respond:
 
             if self.last_time is not None:
@@ -260,45 +269,6 @@ class ModelReactor:
 
         self.velocity.reset()
         self.stop_emitter()
-
-    @property
-    def active_hotbar_slot(self):
-        # TODO return our active slot
-        pass
-
-    @active_hotbar_slot.setter
-    def active_hotbar_slot(self, slot_num):
-
-        his = self.held_item_slot_packet()
-        his.fields.slotId = slot_num
-        self.connection.send(his)
-
-    def swap_hands(self):
-
-        bd = self.block_dig_packet()
-
-        bd.fields.status = 6
-        bd.fields.location.x = 0
-        bd.fields.location.y = 0
-        bd.fields.location.z = 0
-        bd.fields.face = 0
-        self.connection.send(bd)
-
-    def drop(self, all=False):
-
-        bd = self.block_dig_packet()
-
-        if all:
-            bd.fields.status = 3
-        else:
-            bd.fields.status = 4
-
-        bd.fields.location.x = 0
-        bd.fields.location.y = 0
-        bd.fields.location.z = 0
-        bd.fields.face = 0
-
-        self.connection.send(bd)
 
     def crouch(self):
 
