@@ -83,8 +83,6 @@ class Dispatcher:
 
     def enqueue(self, emitter, event, key=None):
 
-        raise Tortoise()
-
         self.event_queue.append(
             (event, key)
         )

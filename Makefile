@@ -1,9 +1,17 @@
 .SILENT :
 
+package: clean build test
+	#TODO build documentation
+	#TODO create release
+	echo .
+
 build: clean coverage
 
 lint:
 	pylint *.py
+
+sanity:
+	python -m unittest discover -v --failfast
 
 test:
 	python -m unittest discover -v
