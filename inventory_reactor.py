@@ -4,6 +4,7 @@
 from observer import Listener
 from packet_event import PacketEvent
 from protocol import State, Direction
+from item import Item
 
 
 class InventoryReactor:
@@ -26,6 +27,8 @@ class InventoryReactor:
             setattr(self, prop_name, packet)
 
         self._active_hotbar_slot = 0
+
+        self.slots = {}
 
     @property
     def active_hotbar_slot(self):
@@ -76,16 +79,32 @@ class InventoryReactor:
     @Listener(PacketEvent, area=State.PLAY, key='set_slot')
     def on_set_slot(self, event):
 
-        import pprint
+        packet = event.packet
 
-        pprint.pprint({
-            'event': event,
-            'windowId': event.packet.fields.windowId,
-            'slot': event.packet.fields.slot,
-            'item': {
-                'block_id': event.packet.fields.item.block_id,
-                'count': event.packet.fields.item.item_count,
-                'damage': event.packet.fields.item.item_damage
-            }
-        })
+#        import pprint
 
+#         pprint.pprint({
+#             'event': event,
+#             'windowId': packet.fields.windowId,
+#             'slot': packet.fields.slot,
+#             'item': {
+#                 'block_id': packet.fields.item.block_id,
+#                 'count': packet.fields.item.item_count,
+#                 'damage': packet.fields.item.item_damage
+#             }
+#         })
+
+        fields = packet.fields
+        item = fields.item
+
+        if item.block_id == -1:
+            # clear the slot
+            self.slots.pop(fields.slot, None)
+        else:
+
+            self.slots[fields.slot] = Item(
+                block_id=item.block_id,
+                count=item.item_count,
+                damage=item.item_damage,
+                data=item.nbt
+            )

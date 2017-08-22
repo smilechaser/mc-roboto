@@ -5,6 +5,7 @@ TODO format documentation according to: http://google.github.io/styleguide/pygui
 
 import os
 import json
+import traceback
 
 from agent_reactor import ModelReactor, StopEvent, TickEvent
 from atoms import Position, Face, Direction
@@ -57,6 +58,34 @@ class Robot:
 
     @Listener(PacketEvent, area=State.PLAY, key='chat')
     def on_chat(self, event):
+
+        packet = event.packet
+
+        data = json.loads(packet.fields.message)
+
+        translate = data['translate']
+
+        if translate != 'commands.message.display.incoming':
+            return
+
+        sender = data['with'][0]['text']
+
+        message = ''.join([x['text'] for x in data['with'][-1]['extra']])
+
+        if message is None:
+            return
+
+        try:
+            self.do_chat(message, sender)
+        except Exception as exc:
+
+            print('--- EXCEPTION ---')
+            traceback.print_exc()
+            print('-----------------')
+
+            self.model.say("Oww, that hurts my brain.", sender)
+
+    def do_chat(self, message, sender):
         '''Ulitimately this needs to be refactored to be more comprehensive
         (not to mention robust) since this will be the robot's means
         of conversing with the world.
@@ -84,22 +113,6 @@ class Robot:
             'death.attack.mob'
             )
         '''
-
-        packet = event.packet
-
-        data = json.loads(packet.fields.message)
-
-        translate = data['translate']
-
-        if translate != 'commands.message.display.incoming':
-            return
-
-        sender = data['with'][0]['text']
-
-        message = ''.join([x['text'] for x in data['with'][-1]['extra']])
-
-        if message is None:
-            return
 
         parts = message.split(' ')
 
@@ -210,6 +223,38 @@ class Robot:
 
             self.model.use(hand)
 
+        elif action == 'stock':
+            # format: stock
+            # format: stock item
+
+            slots = [x for x in self.inventory.slots.keys()]
+
+            slots.sort()
+
+            item = None
+
+            if args:
+
+                assert len(args) == 1, 'Expected "item name" but got "{}".'.format(args)
+
+                # TODO filter results if we're provided with an item to look for
+
+                self.model.say("I can't do that right now.", sender)
+
+            else:
+
+                print('-' * 55)
+                print('- Inventory -'.center(55))
+                print('-' * 55)
+
+                for slot in slots:
+
+                    print('Slot: {} - {}'.format(slot, self.inventory.slots[slot]))
+
+                print('=' * 55)
+
+                self.model.say("I have {} items in my inventory and provided the details in my log.".format(len(self.inventory.slots)), sender)
+
         else:
 
             self.model.say("Sorry, I don't understand.", sender)
@@ -266,11 +311,11 @@ def main():
     agent_reactor.stop_emitter.bind(robot)
     agent_reactor.tick_emitter.bind(robot)
 
-    connection.connect()
-
-    packet_reactor.login('bobo')
-
     try:
+        connection.connect()
+
+        packet_reactor.login('bobo')
+
         while True:
             connection.process()
     except:
