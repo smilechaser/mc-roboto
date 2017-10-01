@@ -18,7 +18,7 @@ from packet_event import PacketEvent
 from packet_reactor import PacketReactor
 from protocol import PacketFactory, State
 
-from map_chunk import parse_chunk_data, ChunkManager
+from map_chunk import ChunkManager
 
 
 class Config:
@@ -40,6 +40,23 @@ class Robot:
         self.destination = None
 
         self.chunk_manager = ChunkManager()
+
+    # DEBUG
+    @Listener(PacketEvent, area=State.PLAY, key='open_window')
+    def on_open_window(self, event):
+
+        packet = event.packet
+        fields = packet.fields
+
+        print('--- on_open_window ---')
+        import pprint
+        pprint.pprint({
+            'windowId': fields.windowId,
+            'inventoryType': fields.inventoryType,
+            'windowTitle': fields.windowTitle,
+            'slotCount': fields.slotCount
+        })
+        print('======================')
 
     @Listener(TickEvent)
     def on_tick(self, event):
@@ -136,6 +153,8 @@ class Robot:
 
             self.destination = Position.from_args(self.model.position, direction.value)
 
+            self.model.facing.at(self.model.position, self.destination)
+
         elif action == 'stop':
             # format: stop
 
@@ -208,21 +227,6 @@ class Robot:
 
             self.inventory.swap_hands()
 
-        elif action == 'use':
-            # format: use
-            # format: use other
-
-            hand = 0     # main hand
-
-            if args:
-
-                assert len(args) == 1 and args[0] == 'other', 'Expected "other" but got "{}".'.format(
-                    args)
-
-                hand = 1
-
-            self.model.use(hand)
-
         elif action == 'stock':
             # format: stock
             # format: stock item
@@ -230,8 +234,6 @@ class Robot:
             slots = [x for x in self.inventory.slots.keys()]
 
             slots.sort()
-
-            item = None
 
             if args:
 
@@ -254,6 +256,25 @@ class Robot:
                 print('=' * 55)
 
                 self.model.say("I have {} items in my inventory and provided the details in my log.".format(len(self.inventory.slots)), sender)
+
+        elif action == 'sleep':
+            # format: sleep
+
+            self.model.facing.pitch = 90.0
+
+            self.model.crouch()
+
+            self.model.say("Zzzzzz", sender)
+
+        elif action == 'wake':
+            # format: wake
+            # format: wake up
+
+            self.model.facing.pitch = 0.0
+
+            self.model.stand()
+
+            self.model.say("Good morning.", sender)
 
         else:
 
@@ -282,7 +303,7 @@ def main():
     # TODO should the inventory reactor be on the model?
     robot = Robot(factory, model=agent_reactor, inventory=inventory)
 
-    # 
+    #
     # establish our threaded dispatcher
     # TODO need a better way to do this
     #

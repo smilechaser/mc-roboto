@@ -139,6 +139,9 @@ class Packet:
 
 
 class PacketFactory:
+    '''
+    '''
+
     @classmethod
     def packet_name_to_classname(clz, name):
 

@@ -43,7 +43,8 @@ class ModelReactor:
 
         RESPONSE_PACKETS = ('client_command', 'teleport_confirm', 'flying',
                             'position_look', 'block_dig',
-                            'entity_action', 'block_place', 'chat')
+                            'entity_action', 'block_place', 'chat',
+                            'use_entity')
 
         for name in RESPONSE_PACKETS:
 
@@ -347,3 +348,16 @@ class ModelReactor:
             chat.fields.message = message
 
         self.connection.send(chat)
+
+    def use_entity(self, target_entity_id, hand):
+
+        assert(hand in [0, 1])
+
+        use_packet = self.use_entity_packet()
+
+        use_packet.fields.target = target_entity_id
+        use_packet.fields.mouse = 0 # 0=interact, 1=attack, 2=interact at
+        use_packet.fields.hand = hand   # 0=main, 1=offhand
+
+        self.connection.send(use_packet)
+

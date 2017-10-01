@@ -1,3 +1,7 @@
+# Now
+
+1. Figure out encryption using notes/files in the `encryption` folder.
+
 # Sooner
 
 1. inventory
