@@ -426,11 +426,21 @@ class Buffer(DataType):
     def from_wire(cls, data, offset, fullsize):
 
         # read the length (varint)
-        packet_length, varint_length = VarInt.from_wire(data, offset, fullsize)
+        buffer_length, varint_length = VarInt.from_wire(data, offset, fullsize)
 
         # get the rest of the buffer
         return data[offset + varint_length:
-                    packet_length], varint_length + packet_length
+                    offset + varint_length + buffer_length], varint_length + buffer_length
+
+    @classmethod
+    def to_wire(cls, data):
+
+        retval = bytearray()
+
+        retval.extend(VarInt.to_wire(len(data)))
+        retval.extend([x for x in data])
+
+        return retval
 
 
 @data_type(name='array')

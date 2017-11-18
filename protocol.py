@@ -1,12 +1,11 @@
 '''
 '''
 
-import copy
 import enum
 import json
 import os
 
-from datatypes import VarInt, UnsignedInt64, DATA_TYPE_REGISTRY
+from datatypes import VarInt, DATA_TYPE_REGISTRY
 
 
 class NoSuchFieldException(RuntimeError):

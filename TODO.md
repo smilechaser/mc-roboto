@@ -4,6 +4,11 @@
 
 # Sooner
 
+1. create a farming bot:
+    - programmable via "learn X" conversations
+    - needs a "tasks module" that can keep track of the "next thing to do" and doesn't try to spam
+        all of its program commands at once
+
 1. inventory
     - refactor how we deal with items - we want to be able to chat in terms of "Dark prismarine"
         rather than ```Prismarine 0 2```
