@@ -1,6 +1,6 @@
 # Now
 
-1. Figure out encryption using notes/files in the `encryption` folder.
+1. Create an "Encryption Termination Proxy" that we can use to connect to servers that are *not* in offline mode.
 
 # Sooner
 
