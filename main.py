@@ -12,7 +12,6 @@ from atoms import Position, Face, Direction
 from connection import Connection
 from dispatchers import ThreadedDispatcher
 from inventory_reactor import InventoryReactor
-from monitor_observer import AnalyticsReactor
 from nbt import nbt
 from observer import Listener
 from packet_event import PacketEvent
@@ -288,6 +287,11 @@ class Robot:
 
             self.model.say("Good morning.", sender)
 
+        elif action == 'leave':
+            # format: leave
+
+            self.model.leave()
+
         else:
 
             self.model.say("Sorry, I don't understand.", sender)
@@ -309,7 +313,6 @@ def main():
     factory = PacketFactory(protocol_path, Config.PROTOCOL_VERSION)
 
     agent_reactor = ModelReactor(factory, connection)
-    analytics = AnalyticsReactor(factory)
     inventory = InventoryReactor(factory, connection)
     packet_reactor = PacketReactor(factory, connection)
     # TODO should the inventory reactor be on the model?
@@ -318,6 +321,10 @@ def main():
     #
     # establish our threaded dispatcher
     # TODO need a better way to do this
+    #
+
+    #
+    # TODO need a way to signal threaded reactors to shutdown gracefully
     #
 
     connection.raw_packet_emitter.dispatcher = threaded_dispatcher
@@ -332,13 +339,11 @@ def main():
 
     # connection
     connection.raw_packet_emitter.bind(packet_reactor)
-    connection.raw_packet_emitter.bind(analytics)
 
     # packet_reactor
     packet_reactor.play_state_emitter.bind(agent_reactor)
     packet_reactor.play_state_emitter.bind(inventory)
     packet_reactor.play_state_emitter.bind(robot)
-    packet_reactor.state_change_emitter.bind(analytics)
 
     # agent_reactor
     agent_reactor.stop_emitter.bind(robot)
@@ -351,7 +356,7 @@ def main():
 
         while True:
             connection.process()
-    except Exception:
+    finally:
 
         agent_reactor.stop()
         threaded_dispatcher.stop()

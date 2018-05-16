@@ -78,7 +78,7 @@ class ModelReactor:
 
     def stop(self):
 
-        #TODO use a queue.Queue for this instead?
+        # TODO use a queue.Queue for this instead?
         self.respond = False
 
         if self.responder_thread.is_alive():
@@ -87,7 +87,7 @@ class ModelReactor:
     def responder(self):
         '''This is the method that gets called in a separate thread.'''
 
-        #TODO use a queue.Queue for this instead?
+        # TODO use a queue.Queue for this instead?
         while self.respond:
 
             if self.last_time is not None:
@@ -192,8 +192,6 @@ class ModelReactor:
 
     @Listener(PacketEvent, area=State.PLAY, key='update_time')
     def on_update_time(self, event):
-
-        packet = event.packet
 
         if self.last_time is None:
             self.last_time = time.perf_counter()
@@ -356,8 +354,14 @@ class ModelReactor:
         use_packet = self.use_entity_packet()
 
         use_packet.fields.target = target_entity_id
-        use_packet.fields.mouse = 0 # 0=interact, 1=attack, 2=interact at
+        use_packet.fields.mouse = 0  # 0=interact, 1=attack, 2=interact at
         use_packet.fields.hand = hand   # 0=main, 1=offhand
 
         self.connection.send(use_packet)
 
+    def leave(self):
+
+        # TODO this doesn't exit cleanly, since the dispatcher threads will
+        # continue to run after we disconnect the socket
+
+        self.connection.disconnect()

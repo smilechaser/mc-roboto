@@ -30,6 +30,11 @@ class Connection:
 
         self.socket.connect((self.server, self.port))
 
+    def disconnect(self):
+
+        self.socket.close()
+        self.socket = None
+
     @property
     def compression(self):
 
