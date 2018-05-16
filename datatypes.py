@@ -306,10 +306,18 @@ class Slot(DataType):
         item_damage, consumed = Int16.from_wire(data, new_offset, fullsize)
         new_offset += consumed
 
-        # TODO need to parse NBT data and return the calculated offset (which should == fullsize)
+        # we don't parse this - just store the raw data until
+        # someone actually needs it
+
+        nbt_data = data[new_offset:new_offset + (fullsize-new_offset)]
         new_offset = fullsize
 
-        return Slot(block_id=block_id, item_count=item_count, item_damage=item_damage), new_offset
+        return Slot(
+            block_id=block_id,
+            item_count=item_count,
+            item_damage=item_damage,
+            nbt=nbt_data
+        ), new_offset
 
     @classmethod
     def to_wire(cls, data):

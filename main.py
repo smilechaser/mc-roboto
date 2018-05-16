@@ -13,6 +13,7 @@ from connection import Connection
 from dispatchers import ThreadedDispatcher
 from inventory_reactor import InventoryReactor
 from monitor_observer import AnalyticsReactor
+from nbt import nbt
 from observer import Listener
 from packet_event import PacketEvent
 from packet_reactor import PacketReactor
@@ -249,9 +250,20 @@ class Robot:
                 print('- Inventory -'.center(55))
                 print('-' * 55)
 
+                item_count = 1
+
                 for slot in slots:
 
                     print('Slot: {} - {}'.format(slot, self.inventory.slots[slot]))
+
+                    with open('slot_data_{}.dat'.format(item_count), 'wb') as fout:
+
+                        data = self.inventory.slots[slot].data
+
+                        if data:
+                            fout.write(data)
+
+                    item_count += 1
 
                 print('=' * 55)
 
@@ -339,7 +351,7 @@ def main():
 
         while True:
             connection.process()
-    except:
+    except Exception:
 
         agent_reactor.stop()
         threaded_dispatcher.stop()
