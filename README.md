@@ -1,3 +1,5 @@
+***STATUS:*** Archived. I don't intend to develop this project any further.
+
 # mc-roboto
 
 A MineCraft client library with dynamic protocol capability for building an
